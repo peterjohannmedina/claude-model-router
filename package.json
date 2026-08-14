@@ -1,0 +1,23 @@
+{
+  "name": "claude-model-router",
+  "version": "0.1.0",
+  "description": "MCP worker that lets Claude Code and Codex delegate bounded semantic tasks to a trusted LAN model served by LiteLLM.",
+  "license": "ISC",
+  "type": "commonjs",
+  "main": "mcp/local-inference-mcp.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "mcp:local-inference": "node mcp/local-inference-mcp.js",
+    "test": "npm run test:mcp && npm run test:resource && npm run test:claude-resource",
+    "test:mcp": "node --test tests/local-inference-mcp.test.js",
+    "test:resource": "node --test tests/local-resource-verification.test.js",
+    "test:claude-resource": "node --test tests/local-claude-resource-verification.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "ajv": "^8.18.0",
+    "zod": "^4.3.6"
+  }
+}
