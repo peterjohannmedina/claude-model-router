@@ -21,6 +21,7 @@ const DEFAULT_MAX_INPUT_CHARS = 50000;
 // answer starts, so it has to cover both. 1200 was enough for the answer
 // alone but left nothing for reasoning on real diffs.
 const DEFAULT_MAX_OUTPUT_TOKENS = 4000;
+const DEFAULT_MAX_UPSTREAM_RESPONSE_BYTES = 2_000_000;
 const DEFAULT_TIMEOUT_MS = 120000;
 const DEFAULT_HTTP_PORT = 8787;
 
@@ -76,6 +77,11 @@ function parseBooleanEnv(env, name, fallback) {
   throw new LocalInferenceError(`${name} must be a boolean`, 'invalid_configuration');
 }
 
+function isLoopbackHost(host) {
+  const normalized = String(host || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+  return normalized === '127.0.0.1' || normalized === '::1' || normalized === 'localhost';
+}
+
 function normalizeBaseUrl(raw) {
   let parsed;
   try {
@@ -121,11 +127,19 @@ function loadConfig(env = process.env) {
     max: 65535,
   });
 
+  const mcpBearerToken = env.MCP_BEARER_TOKEN || '';
+  if (transport === 'http' && !isLoopbackHost(host) && !mcpBearerToken) {
+    throw new LocalInferenceError(
+      'MCP_BEARER_TOKEN is required when MCP_HOST is not loopback',
+      'invalid_configuration',
+    );
+  }
+
   return Object.freeze({
     transport,
     host,
     port,
-    mcpBearerToken: env.MCP_BEARER_TOKEN || '',
+    mcpBearerToken,
     httpJsonResponse: parseBooleanEnv(env, 'MCP_HTTP_JSON_RESPONSE', true),
     litellmBaseUrl: normalizeBaseUrl(baseUrl).toString().replace(/\/$/, ''),
     chatCompletionsUrl: resolveChatCompletionsUrl(baseUrl),
@@ -141,6 +155,12 @@ function loadConfig(env = process.env) {
       min: 1,
       max: 32768,
     }),
+    maxUpstreamResponseBytes: parseNumberEnv(
+      env,
+      'LOCAL_WORKER_MAX_UPSTREAM_RESPONSE_BYTES',
+      DEFAULT_MAX_UPSTREAM_RESPONSE_BYTES,
+      { integer: true, min: 1024, max: 16_000_000 },
+    ),
     timeoutMs: parseNumberEnv(env, 'LOCAL_WORKER_TIMEOUT_MS', DEFAULT_TIMEOUT_MS, {
       integer: true,
       min: 1000,
@@ -189,6 +209,45 @@ function contentToText(content) {
   return content
     .map((part) => (part && typeof part.text === 'string' ? part.text : ''))
     .join('');
+}
+
+async function readBoundedResponseText(response, maxBytes) {
+  const declaredLength = Number(response.headers.get('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new LocalInferenceError(
+      `LiteLLM response exceeds the ${maxBytes}-byte limit`,
+      'upstream_response_too_large',
+    );
+  }
+  if (!response.body) return '';
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel('response too large').catch(() => {});
+        throw new LocalInferenceError(
+          `LiteLLM response exceeds the ${maxBytes}-byte limit`,
+          'upstream_response_too_large',
+        );
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 function extractBalancedJson(text) {
@@ -301,7 +360,7 @@ class LiteLLMClient {
           stream: false,
         }),
       });
-      const raw = await response.text();
+      const raw = await readBoundedResponseText(response, this.config.maxUpstreamResponseBytes);
       let payload;
       try {
         payload = JSON.parse(raw);
@@ -365,6 +424,53 @@ function basePrompt() {
 
 function jsonForPrompt(value) {
   return JSON.stringify(value, null, 2);
+}
+
+function validateClassificationResult(value, allowedLabels, itemCount) {
+  const allowed = new Set(allowedLabels);
+  const schema = z.object({
+    items: z.array(z.object({
+      index: z.number().int().min(0).max(itemCount - 1),
+      label: z.string().refine((label) => allowed.has(label), 'label is not allowed'),
+      reason: z.string().min(1).max(2000),
+    }).strict()).length(itemCount),
+  }).strict().superRefine((result, context) => {
+    const indexes = result.items.map((item) => item.index);
+    if (new Set(indexes).size !== itemCount) {
+      context.addIssue({ code: 'custom', message: 'items must contain each input index exactly once' });
+    }
+  });
+  const validated = schema.safeParse(value);
+  if (!validated.success) {
+    throw new LocalInferenceError(
+      `local classification result is invalid: ${validated.error.issues[0]?.message || 'schema mismatch'}`,
+      'invalid_model_output',
+    );
+  }
+  return validated.data;
+}
+
+function validateDiffReviewResult(value, maxFindings) {
+  const finding = z.object({
+    severity: z.string().min(1).max(100),
+    title: z.string().min(1).max(500),
+    source: z.string().min(1).max(1000),
+    evidence: z.string().min(1).max(4000),
+    recommendation: z.string().min(1).max(4000),
+  }).strict();
+  const schema = z.object({
+    summary: z.string().max(4000),
+    findings: z.array(finding).max(maxFindings),
+    abstain: z.boolean(),
+  }).strict();
+  const validated = schema.safeParse(value);
+  if (!validated.success) {
+    throw new LocalInferenceError(
+      `local diff review result is invalid: ${validated.error.issues[0]?.message || 'schema mismatch'}`,
+      'invalid_model_output',
+    );
+  }
+  return validated.data;
 }
 
 function makeWorkerResult({ parsed, completion, traceId, startedAt, config, evidence = [], truncated = false }) {
@@ -432,10 +538,17 @@ function registerTools(server, config, client) {
     annotations,
   }, withToolErrors(async ({ text, schema, source = 'input' }) => {
     const input = requireText(text, 'text', config.maxInputChars);
+    const evidenceSource = requireText(source, 'source', 1000);
     const extractionSchema = requireObject(schema, 'schema');
     const schemaText = jsonForPrompt(extractionSchema);
     if (schemaText.length > 10000) {
       throw new LocalInferenceError('schema exceeds the 10000-character limit', 'input_too_large');
+    }
+    if (input.length + schemaText.length > config.maxInputChars) {
+      throw new LocalInferenceError(
+        `text and schema exceed the ${config.maxInputChars}-character limit`,
+        'input_too_large',
+      );
     }
     const traceId = `local-mcp-${randomUUID()}`;
     const startedAt = Date.now();
@@ -462,7 +575,7 @@ function registerTools(server, config, client) {
       traceId,
       startedAt,
       config,
-      evidence: [{ source, excerpt: input.slice(0, 600) }],
+      evidence: [{ source: evidenceSource, excerpt: input.slice(0, 600) }],
     }));
   }));
 
@@ -480,7 +593,9 @@ function registerTools(server, config, client) {
     const values = requireStringArray(items, 'items', 100, Math.min(config.maxInputChars, 12000));
     const allowedLabels = requireStringArray(labels, 'labels', 32, 200);
     const rubric = requireText(criteria, 'criteria', 6000);
-    const totalChars = values.reduce((total, value) => total + value.length, 0) + rubric.length;
+    const totalChars = values.reduce((total, value) => total + value.length, 0)
+      + allowedLabels.reduce((total, value) => total + value.length, 0)
+      + rubric.length;
     if (totalChars > config.maxInputChars) {
       throw new LocalInferenceError(
         `items and criteria exceed the ${config.maxInputChars}-character limit`,
@@ -502,7 +617,11 @@ function registerTools(server, config, client) {
         'Return this JSON shape: {"items":[{"index":0,"label":"...","reason":"..."}]}',
       ].join('\n'),
     });
-    const parsed = parseJsonDocument(completion.content);
+    const parsed = validateClassificationResult(
+      parseJsonDocument(completion.content),
+      allowedLabels,
+      values.length,
+    );
     return toolSuccess(makeWorkerResult({
       parsed,
       completion,
@@ -531,6 +650,13 @@ function registerTools(server, config, client) {
   }, withToolErrors(async ({ diff, rubric, source = 'diff', max_findings = 10 }) => {
     const inputDiff = requireText(diff, 'diff', config.maxInputChars);
     const reviewRubric = requireText(rubric, 'rubric', 8000);
+    const evidenceSource = requireText(source, 'source', 1000);
+    if (inputDiff.length + reviewRubric.length > config.maxInputChars) {
+      throw new LocalInferenceError(
+        `diff and rubric exceed the ${config.maxInputChars}-character limit`,
+        'input_too_large',
+      );
+    }
     const traceId = `local-mcp-${randomUUID()}`;
     const startedAt = Date.now();
     const completion = await client.complete({
@@ -549,14 +675,14 @@ function registerTools(server, config, client) {
         'Return this JSON shape: {"summary":"...","findings":[],"abstain":false}',
       ].join('\n'),
     });
-    const parsed = parseJsonDocument(completion.content);
+    const parsed = validateDiffReviewResult(parseJsonDocument(completion.content), max_findings);
     return toolSuccess(makeWorkerResult({
       parsed,
       completion,
       traceId,
       startedAt,
       config,
-      evidence: [{ source, excerpt: inputDiff.slice(0, 1000) }],
+      evidence: [{ source: evidenceSource, excerpt: inputDiff.slice(0, 1000) }],
     }));
   }));
 }
@@ -583,7 +709,30 @@ function isAuthorized(req, config) {
   return req.headers.authorization === `Bearer ${config.mcpBearerToken}`;
 }
 
+function isSafeLoopbackRequest(req, config) {
+  if (!isLoopbackHost(config.host)) return true;
+  const hostHeader = String(req.headers.host || '');
+  let hostName;
+  try {
+    hostName = new URL(`http://${hostHeader}`).hostname;
+  } catch {
+    return false;
+  }
+  if (!isLoopbackHost(hostName)) return false;
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    return isLoopbackHost(new URL(String(origin)).hostname);
+  } catch {
+    return false;
+  }
+}
+
 async function handleHttpRequest(req, res, config, client) {
+  if (!isSafeLoopbackRequest(req, config)) {
+    writeJson(res, 403, { error: 'forbidden_host_or_origin' });
+    return;
+  }
   const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   if (requestUrl.pathname === '/healthz') {
     writeJson(res, 200, {
@@ -680,6 +829,7 @@ if (require.main === module) {
 module.exports = {
   DEFAULT_MAX_INPUT_CHARS,
   DEFAULT_MAX_OUTPUT_TOKENS,
+  DEFAULT_MAX_UPSTREAM_RESPONSE_BYTES,
   LiteLLMClient,
   LocalInferenceError,
   SERVER_NAME,
@@ -690,8 +840,11 @@ module.exports = {
   loadConfig,
   normalizeBaseUrl,
   parseJsonDocument,
+  readBoundedResponseText,
   resolveChatCompletionsUrl,
   start,
   startHttpServer,
   validateExtractedValue,
+  validateClassificationResult,
+  validateDiffReviewResult,
 };

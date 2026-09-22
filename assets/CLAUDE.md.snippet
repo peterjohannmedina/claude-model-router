@@ -1,0 +1,9 @@
+<!-- claude-model-routing:start -->
+## Default Claude Model Routing
+
+- Apply `claude-model-routing` before nontrivial planning, model selection, or local-worker delegation.
+- Keep coherent work in the current session. Scope bounded workers with an objective, supplied evidence, constraints, acceptance criteria, and a concise return format.
+- Choose Haiku for mechanical work, Sonnet for everyday engineering, and Opus for ambiguous or consequential work. Honor a persisted usage-conservation guard; never infer that a quota reset occurred.
+- Local LLM delegation is optional. Read the routing policy, check capacity, wait for the result, validate it, and record each eligible outcome exactly once. The default local target is 50%; suitability and availability take precedence.
+- Routing never authorizes permission changes, model-setting changes, secret disclosure, or accepting local output as final judgment. Start a new Claude Code session after updating skills or agents.
+<!-- claude-model-routing:end -->

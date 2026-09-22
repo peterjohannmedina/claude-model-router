@@ -3,15 +3,13 @@
     "local-inference": {
       "type": "stdio",
       "command": "node",
-      "args": ["mcp/local-inference-mcp.js"],
+      "args": ["${CLAUDE_PROJECT_DIR:-.}/mcp/local-inference-mcp.js"],
       "env": {
-        "LITELLM_BASE_URL": "http://192.168.1.214:4000/v1",
-        "LITELLM_MODEL": "muse",
         "LOCAL_WORKER_MAX_OUTPUT_TOKENS": "4000",
         "LOCAL_WORKER_TIMEOUT_MS": "60000",
         "LOCAL_WORKER_TEMPERATURE": "0"
       },
-      "request_timeout_ms": 60000
+      "timeout": 60000
     }
   }
 }

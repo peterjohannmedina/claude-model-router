@@ -1,68 +1,80 @@
-# claude-model-router
+# Claude Model Router
 
-An MCP adapter that lets Claude Code and Codex delegate **bounded semantic
-work** to a trusted local model served over LiteLLM, keeping final judgment on
-the frontier agent.
+Model routing for Claude Code, with a built-in option to delegate bounded
+subagent work to local LLMs. The main Claude session stays responsible for
+requirements, validation, and final judgment.
 
-The worker exposes three read-only tools — semantic extraction, classification,
-and first-pass diff review. It has no file-write and no shell access.
+The package combines native Haiku/Sonnet/Opus worker profiles, persistent routing
+controls, and two optional local inference paths: a resident-first process worker
+and an MCP adapter with extraction, classification, and first-pass diff review.
+Local workers receive only supplied task content and have no tools or file access.
 
-## Requirements
+## Install routing
 
-- Node.js 20+
-- A LiteLLM endpoint serving the target model (default: `http://192.168.1.214:4000/v1`, model `muse`)
+Requires Node.js 20.11 or newer and Claude Code with skills and custom subagents.
+From this checkout:
 
-## Install
-
-```bash
-npm install
+```sh
+node scripts/install.js --dry-run
+node scripts/install.js
 ```
 
-## Run
+The installer adds two skills, four agent profiles, and a marked instruction
+block under `~/.claude` (or `CLAUDE_CONFIG_DIR`). It preserves unrelated
+instructions, settings, and routing history. It does not register MCP servers or
+change your selected model. Start a new Claude Code session after installation.
+Upgrades replace the two package-owned skill directories, removing obsolete
+package files; keep personal extensions in separate skill directories.
 
-```bash
-npm run mcp:local-inference
-```
+Use `--config-root /path/to/.claude` for another profile,
+`--user-root /path/to/user` for a separate user home, or
+`--skip-global-instruction` to omit the automatic-routing instruction block.
 
-The default transport is stdio. Configure the route with `LITELLM_BASE_URL`
-and `LITELLM_MODEL`.
+## Routing controls
 
-## Claude Code integration
+Routing applies to nontrivial work and can also be invoked as
+`/claude-model-routing`. Use `/claude-routing` for the default 50% local-worker
+target, or `/claude-routing 75` to set a different target. Zero disables
+policy-driven local dispatch.
 
-`.mcp.json` registers the stdio server, and `.claude/` wires up the delegation
-route:
+| Capability | Behavior |
+|---|---|
+| Native workers | Haiku for mechanical work, Sonnet for everyday engineering, Opus for complex review and design. |
+| Context-aware routing | Keep coherent work together; delegate only when the handoff is worthwhile. |
+| Local-worker target | Persistent best-effort target for eligible bounded opportunities, with deduplicated outcome accounting. |
+| Usage conservation | Persist a guard after an observed session or weekly usage reading reaches 90%; clear only after observed resets. |
+| Local delegation | Validate capacity, wait for a bounded result, and return candidate evidence to the parent. |
 
-- `.claude/agents/local-muse-worker.md` — a read-only subagent limited to the
-  three local tools, escalating final judgment to the parent agent.
-- `.claude/settings.json` — `SessionStart` / `PreToolUse` / `SubagentStart`
-  availability checks, plus scoped MCP permissions.
+These controls guide Claude; they do not automatically switch the main model or
+read account usage in the background. Secrets, tool-dependent work, edits, and
+high-stakes final judgment are excluded from local-worker packets.
 
-Before delegating, the hooks preflight the route with
-`scripts/verify-local-inference-claude-resource.js`, which confirms
-reachability **without generating inference**. If the local resource is
-unreachable, Claude declines the spawn and answers on the frontier path rather
-than simulating a local result.
+## Optional local LLM delegation
 
-## Configuration
+Choose the integration that fits your deployment:
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `LITELLM_BASE_URL` | `http://192.168.1.214:4000/v1` | OpenAI-compatible endpoint |
-| `LITELLM_MODEL` | `muse` | Model route to call |
-| `LOCAL_WORKER_MAX_OUTPUT_TOKENS` | `4000` | Output budget; must be ≥ 2000 |
-| `LOCAL_WORKER_TIMEOUT_MS` | `60000` | Per-request timeout |
-| `LOCAL_WORKER_TEMPERATURE` | `0` | Sampling temperature |
+- **Resident process worker:** checks local capacity first, then a configured
+  gateway. Supports Chat Completions and Responses, with a bounded deadline and
+  persistent outcome accounting. Requires Windows PowerShell 5.1 or PowerShell 7.
+  See [local worker setup](docs/local-workers.md).
+- **MCP semantic tools:** connects to an OpenAI-compatible Chat Completions
+  endpoint. Exposes only `local_extract`, `local_classify`, and
+  `local_review_diff`, with validated inputs and model-returned JSON. Also usable
+  from Codex. See [MCP setup](docs/local-inference-mcp.md).
 
-> **Do not lower the output budget below 2000.** Reasoning models spend
-> `max_tokens` on hidden reasoning before emitting an answer, so a small budget
-> returns empty content with `finish_reason=length` on real workloads. Both
-> verifiers reject a budget under 2000 so this cannot regress silently.
+Native routing works without either local integration. The checked-in project
+MCP route remains unavailable until its endpoint and model are configured.
 
-See [docs/local-inference-mcp.md](docs/local-inference-mcp.md) for Codex,
-Claude Code, and Streamable HTTP configuration.
+## Development and reconciliation
 
-## Tests
-
-```bash
+```sh
+npm ci --ignore-scripts
 npm test
+npm audit
 ```
+
+Tests use synthetic local HTTP servers; they do not call a real LLM. PowerShell
+integration tests run when the runtime is installed and otherwise report skips.
+
+See the [reconciliation and code review](docs/reconciliation.md) for the GitHub,
+deployed-local, and Codex-router differences, fixes, and remaining boundaries.

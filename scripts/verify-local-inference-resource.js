@@ -122,6 +122,18 @@ function normalizeUrl(value) {
   return value.trim().replace(/\/+$/, '');
 }
 
+function isSafeNodeCommand(command) {
+  if (typeof command !== 'string' || !command.trim()) return false;
+  const value = command.trim();
+  if (value === 'node' || value === 'node.exe') return true;
+  if (!path.isAbsolute(value)) return false;
+  const resolved = path.resolve(value);
+  const current = path.resolve(process.execPath);
+  return process.platform === 'win32'
+    ? resolved.toLowerCase() === current.toLowerCase()
+    : resolved === current;
+}
+
 function readFileIfPresent(filePath) {
   try {
     return fs.readFileSync(filePath, 'utf8');
@@ -133,14 +145,18 @@ function readFileIfPresent(filePath) {
 function resolveResourceConfig({ codexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex') } = {}) {
   const configPath = path.join(codexHome, 'config.toml');
   const agentPath = path.join(codexHome, 'agents', `${RESOURCE_NAME}.toml`);
+  const deployedMuseAgentPath = path.join(codexHome, 'agents', 'muse-worker.toml');
   const configText = readFileIfPresent(configPath);
   const agentText = readFileIfPresent(agentPath);
+  const deployedMuseAgentText = readFileIfPresent(deployedMuseAgentPath);
   const sections = configText ? parseTomlSections(configText) : new Map();
   const agentSections = agentText ? parseTomlSections(agentText) : new Map();
+  const deployedMuseAgentSections = deployedMuseAgentText ? parseTomlSections(deployedMuseAgentText) : new Map();
   const provider = sections.get('model_providers.litellm_muse') || {};
   const mcp = sections.get('mcp_servers.local_inference') || {};
   const mcpEnv = sections.get('mcp_servers.local_inference.env') || {};
   const agent = agentSections.get('') || {};
+  const deployedMuseAgent = deployedMuseAgentSections.get('') || {};
   const mcpArgs = Array.isArray(mcp.args) ? mcp.args : [];
   const adapterPath = mcpArgs.find((argument) => String(argument).endsWith('local-inference-mcp.js')) || '';
 
@@ -167,6 +183,8 @@ function resolveResourceConfig({ codexHome = process.env.CODEX_HOME || path.join
     agentName: agent.name || '',
     agentModel: agent.model || '',
     agentProvider: agent.model_provider || '',
+    deployedMuseAgentName: deployedMuseAgent.name || '',
+    deployedMuseAgentProvider: deployedMuseAgent.model_provider || '',
   };
 }
 
@@ -188,7 +206,14 @@ function validateConfiguration(config, target, limits = DEFAULTS) {
   if (needsMcp) {
     add(config.mcpEnabled, 'local_inference MCP server is disabled');
     add(Boolean(config.mcpCommand), 'local_inference MCP server has no command');
-    add(Boolean(config.adapterPath), 'local_inference MCP server does not reference local-inference-mcp.js');
+    add(isSafeNodeCommand(config.mcpCommand),
+      'local_inference MCP server command must be node, node.exe, or the current Node.js executable');
+    const expectedAdapterPath = path.resolve(config.mcpCwd, 'mcp', 'local-inference-mcp.js');
+    const resolvedAdapterPath = config.adapterPath
+      ? path.resolve(config.mcpCwd, config.adapterPath)
+      : '';
+    add(config.mcpArgs.length === 1 && resolvedAdapterPath === expectedAdapterPath,
+      'local_inference MCP server must use the project adapter as its only argument');
     add(Boolean(config.mcpCwd), 'local_inference MCP server has no cwd');
     add(config.mcpEnabledTools.length === EXPECTED_TOOLS.length
       && EXPECTED_TOOLS.every((tool) => config.mcpEnabledTools.includes(tool)),
@@ -204,7 +229,10 @@ function validateConfiguration(config, target, limits = DEFAULTS) {
   }
 
   if (needsAgent) {
-    add(config.agentName === RESOURCE_NAME, `custom agent ${RESOURCE_NAME} is missing`);
+    const missingAgentMessage = config.deployedMuseAgentName
+      ? `custom agent ${RESOURCE_NAME} is missing; deployed ${config.deployedMuseAgentName}/${config.deployedMuseAgentProvider || 'unknown provider'} is a distinct direct-model route`
+      : `custom agent ${RESOURCE_NAME} is missing`;
+    add(config.agentName === RESOURCE_NAME, missingAgentMessage);
     add(config.agentModel === EXPECTED_MODEL, `custom agent ${RESOURCE_NAME} must use ${EXPECTED_MODEL}`);
     add(config.agentProvider === 'litellm_muse', `custom agent ${RESOURCE_NAME} must use litellm_muse`);
   }
@@ -240,7 +268,11 @@ async function fetchJson(url, { timeoutMs, apiKey = '', fetchImpl = globalThis.f
   }
 }
 
-async function checkLiteLLM(config, { timeoutMs = DEFAULTS.providerTimeoutMs, fetchImpl = globalThis.fetch } = {}) {
+async function checkLiteLLM(config, {
+  timeoutMs = DEFAULTS.providerTimeoutMs,
+  fetchImpl = globalThis.fetch,
+  apiKey = config.mcpEnv.LITELLM_API_KEY || process.env.LITELLM_API_KEY || '',
+} = {}) {
   const startedAt = Date.now();
   if (!config.litellmBaseUrl || !config.model) {
     return { ok: false, elapsedMs: Date.now() - startedAt, error: 'LiteLLM URL or model is not configured' };
@@ -249,7 +281,7 @@ async function checkLiteLLM(config, { timeoutMs = DEFAULTS.providerTimeoutMs, fe
   try {
     const { response, body } = await fetchJson(endpoint, {
       timeoutMs,
-      apiKey: config.mcpEnv.LITELLM_API_KEY || '',
+      apiKey,
       fetchImpl,
     });
     const models = Array.isArray(body?.data) ? body.data : Array.isArray(body?.models) ? body.models : [];
@@ -269,19 +301,26 @@ async function checkLiteLLM(config, { timeoutMs = DEFAULTS.providerTimeoutMs, fe
   }
 }
 
-async function checkMcp(config, { timeoutMs = DEFAULTS.mcpTimeoutMs, clientClass = Client, transportClass = StdioClientTransport } = {}) {
+async function checkMcp(config, {
+  timeoutMs = DEFAULTS.mcpTimeoutMs,
+  clientClass = Client,
+  transportClass = StdioClientTransport,
+  inheritedEnv = process.env,
+} = {}) {
   const startedAt = Date.now();
   if (!config.mcpCommand || !config.adapterPath) {
     return { ok: false, elapsedMs: Date.now() - startedAt, error: 'MCP command or adapter is not configured' };
   }
   const client = new clientClass({ name: 'codex-local-resource-check', version: '1.0.0' });
   const transport = new transportClass({
-    command: config.mcpCommand,
+    command: process.execPath,
     args: config.mcpArgs,
     cwd: config.mcpCwd,
     env: {
       ...config.mcpEnv,
-      ...(process.env.LITELLM_API_KEY ? { LITELLM_API_KEY: process.env.LITELLM_API_KEY } : {}),
+      ...(!config.mcpEnv.LITELLM_API_KEY && inheritedEnv.LITELLM_API_KEY
+        ? { LITELLM_API_KEY: inheritedEnv.LITELLM_API_KEY }
+        : {}),
     },
     stderr: 'pipe',
   });
@@ -325,13 +364,20 @@ function cachePath() {
 function configSignature(config) {
   return JSON.stringify({
     providerBaseUrl: config.providerBaseUrl,
+    providerWireApi: config.providerWireApi,
+    providerStreamIdleTimeoutMs: config.providerStreamIdleTimeoutMs,
     litellmBaseUrl: config.litellmBaseUrl,
     model: config.model,
     mcpCommand: config.mcpCommand,
+    mcpEnabled: config.mcpEnabled,
     mcpArgs: config.mcpArgs,
     mcpCwd: config.mcpCwd,
     mcpToolTimeoutSec: config.mcpToolTimeoutSec,
+    mcpStartupTimeoutSec: config.mcpStartupTimeoutSec,
+    mcpEnabledTools: config.mcpEnabledTools,
     workerTimeoutMs: config.workerTimeoutMs,
+    workerMaxOutputTokens: config.workerMaxOutputTokens,
+    agentName: config.agentName,
     agentModel: config.agentModel,
     agentProvider: config.agentProvider,
   });
@@ -377,6 +423,19 @@ async function verifyLocalInferenceResource({
   }
 
   const configurationErrors = validateConfiguration(config, target, limits);
+  if (configurationErrors.length) {
+    const result = makeResult(config, target, startedAt, configurationErrors, {
+      ok: false,
+      skipped: true,
+      error: 'Provider probe skipped because configuration is invalid',
+    }, {
+      ok: false,
+      skipped: true,
+      error: 'MCP probe skipped because configuration is invalid',
+    });
+    if (cache) await writeCache(signature, result);
+    return result;
+  }
   const providerPromise = checkLiteLLM(config, { timeoutMs: limits.providerTimeoutMs, fetchImpl });
   const mcpPromise = target === 'any' || target === 'mcp' || target === 'agent'
     ? mcpProbe(config, { timeoutMs: limits.mcpTimeoutMs })
@@ -395,7 +454,13 @@ async function verifyLocalInferenceResource({
     ...(provider.ok ? [] : [provider.error || 'LiteLLM provider health check failed']),
     ...(mcp.ok ? [] : [mcp.error || 'MCP worker health check failed']),
   ];
-  const result = {
+  const result = makeResult(config, target, startedAt, errors, provider, mcp);
+  if (cache) await writeCache(signature, result);
+  return result;
+}
+
+function makeResult(config, target, startedAt, errors, provider, mcp) {
+  return {
     ok: errors.length === 0,
     target,
     checkedAt: new Date().toISOString(),
@@ -414,8 +479,6 @@ async function verifyLocalInferenceResource({
     mcp,
     errors,
   };
-  if (cache) await writeCache(signature, result);
-  return result;
 }
 
 function isLocalAgentInput(toolInput) {
@@ -543,6 +606,7 @@ module.exports = {
   checkLiteLLM,
   checkMcp,
   hookResponse,
+  isSafeNodeCommand,
   isLocalAgentInput,
   parseTomlSections,
   resolveResourceConfig,

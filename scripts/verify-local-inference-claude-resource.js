@@ -14,12 +14,12 @@ const {
   checkMcp,
   hookResponse,
   isLocalAgentInput,
+  isSafeNodeCommand,
   summarize,
 } = baseVerifier;
 
 const RESOURCE_NAME = 'local-muse-worker';
 const MCP_SERVER_NAME = 'local-inference';
-const EXPECTED_MODEL = baseVerifier.EXPECTED_MODEL;
 const EXPECTED_TOOLS = baseVerifier.EXPECTED_TOOLS;
 const ADAPTER_DEFAULT_OUTPUT_TOKENS = 4000;
 const DEFAULTS = Object.freeze({
@@ -55,13 +55,11 @@ function normalizeUrl(value) {
   return value.trim().replace(/\/+$/, '');
 }
 
-function expandValue(value, projectDir) {
+function expandValue(value, projectDir, env = process.env) {
   if (typeof value !== 'string') return value;
-  return value.replace(/\$\{([^}]+)\}/g, (match, name) => {
-    if (name === 'CLAUDE_PROJECT_DIR') return projectDir;
-    return Object.prototype.hasOwnProperty.call(process.env, name)
-      ? process.env[name]
-      : match;
+  return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (match, name, fallback) => {
+    if (Object.prototype.hasOwnProperty.call(env, name)) return env[name];
+    return fallback === undefined ? '' : fallback;
   });
 }
 
@@ -94,6 +92,7 @@ function resolveClaudeResourceConfig({
   projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd(),
   mcpPath = path.join(projectDir, '.mcp.json'),
   agentPath = path.join(projectDir, '.claude', 'agents', `${RESOURCE_NAME}.md`),
+  env = process.env,
 } = {}) {
   const resolvedProjectDir = path.resolve(projectDir);
   const resolvedMcpPath = path.resolve(mcpPath);
@@ -104,28 +103,40 @@ function resolveClaudeResourceConfig({
   const rawEnv = server.env && typeof server.env === 'object' ? server.env : {};
   const mcpEnv = Object.fromEntries(
     Object.entries(rawEnv)
-      .map(([key, value]) => [key, expandValue(value, resolvedProjectDir)])
+      .map(([key, value]) => [key, expandValue(value, resolvedProjectDir, env)])
       .filter(([, value]) => value !== undefined && value !== null && value !== ''),
   );
+  for (const name of [
+    'LITELLM_BASE_URL',
+    'LITELLM_BASE',
+    'LITELLM_API_KEY',
+    'LITELLM_MODEL',
+    'LOCAL_WORKER_MAX_OUTPUT_TOKENS',
+    'LOCAL_WORKER_TIMEOUT_MS',
+    'LOCAL_WORKER_TEMPERATURE',
+  ]) {
+    if (!(name in mcpEnv) && env[name] !== undefined && env[name] !== '') mcpEnv[name] = env[name];
+  }
   const mcpArgs = Array.isArray(server.args)
-    ? server.args.map((argument) => expandValue(String(argument), resolvedProjectDir))
+    ? server.args.map((argument) => expandValue(String(argument), resolvedProjectDir, env))
     : [];
   const agentText = readFileIfPresent(resolvedAgentPath);
   const agent = parseFrontmatter(agentText);
-  const requestTimeoutMs = Number(server.request_timeout_ms || 0);
+  const toolTimeoutMs = Number(server.timeout || 0);
 
   return {
     projectDir: resolvedProjectDir,
     mcpPath: resolvedMcpPath,
     agentPath: resolvedAgentPath,
     mcpEnabled: Boolean(server.command),
-    mcpCommand: expandValue(server.command || '', resolvedProjectDir),
+    mcpType: server.type || 'stdio',
+    mcpCommand: expandValue(server.command || '', resolvedProjectDir, env),
     mcpArgs,
-    mcpCwd: expandValue(server.cwd || resolvedProjectDir, resolvedProjectDir),
-    mcpRequestTimeoutMs: requestTimeoutMs,
-    mcpToolTimeoutSec: requestTimeoutMs / 1000,
+    mcpCwd: expandValue(server.cwd || resolvedProjectDir, resolvedProjectDir, env),
+    mcpToolTimeoutMs: toolTimeoutMs,
+    mcpToolTimeoutSec: toolTimeoutMs / 1000,
     mcpEnv,
-    litellmBaseUrl: normalizeUrl(mcpEnv.LITELLM_BASE_URL),
+    litellmBaseUrl: normalizeUrl(mcpEnv.LITELLM_BASE_URL || mcpEnv.LITELLM_BASE),
     model: mcpEnv.LITELLM_MODEL || '',
     workerTimeoutMs: Number(mcpEnv.LOCAL_WORKER_TIMEOUT_MS || 0),
     workerMaxOutputTokens: Number(mcpEnv.LOCAL_WORKER_MAX_OUTPUT_TOKENS || 0),
@@ -142,22 +153,35 @@ function validateConfiguration(config, limits = DEFAULTS) {
     if (!condition) errors.push(message);
   };
   add(Boolean(config.litellmBaseUrl), 'Claude local-inference MCP has no LITELLM_BASE_URL');
-  add(config.model === EXPECTED_MODEL, `Claude local-inference MCP model must be ${EXPECTED_MODEL}`);
+  add(Boolean(config.model), 'Claude local-inference MCP has no LITELLM_MODEL');
+  add(config.mcpType === 'stdio', 'Claude local-inference MCP server must use stdio');
   add(Boolean(config.mcpCommand), 'Claude local-inference MCP server has no command');
-  add(Boolean(config.adapterPath), 'Claude local-inference MCP server does not reference local-inference-mcp.js');
+  add(isSafeNodeCommand(config.mcpCommand),
+    'Claude local-inference MCP server command must be node, node.exe, or the current Node.js executable');
+  const expectedAdapterPath = path.join(config.projectDir, 'mcp', 'local-inference-mcp.js');
+  const resolvedAdapterPath = config.adapterPath
+    ? path.resolve(config.mcpCwd, config.adapterPath)
+    : '';
+  add(config.mcpArgs.length === 1 && resolvedAdapterPath === expectedAdapterPath,
+    'Claude local-inference MCP server must use the project adapter as its only argument');
   add(Boolean(config.mcpCwd), 'Claude local-inference MCP server has no working directory');
-  add(config.mcpRequestTimeoutMs > 0 && config.mcpRequestTimeoutMs <= limits.maxRequestTimeoutMs,
-    `Claude MCP request timeout must be between 1 and ${limits.maxRequestTimeoutMs}ms`);
+  add(path.resolve(config.mcpCwd || '.') === config.projectDir,
+    'Claude local-inference MCP working directory must be the project directory');
+  add(config.mcpToolTimeoutMs >= 1000 && config.mcpToolTimeoutMs <= limits.maxRequestTimeoutMs,
+    `Claude MCP tool timeout must be between 1000 and ${limits.maxRequestTimeoutMs}ms`);
   add(config.workerTimeoutMs > 0 && config.workerTimeoutMs <= limits.maxWorkerTimeoutMs,
     `local worker timeout must be between 1 and ${limits.maxWorkerTimeoutMs}ms`);
   add((config.workerMaxOutputTokens || ADAPTER_DEFAULT_OUTPUT_TOKENS) >= limits.minWorkerOutputTokens,
     `local worker output budget must be at least ${limits.minWorkerOutputTokens} tokens to cover reasoning`);
   add(config.agentName === RESOURCE_NAME, `Claude agent ${RESOURCE_NAME} is missing`);
-  add(Boolean(config.agentModel), `Claude agent ${RESOURCE_NAME} has no model`);
+  add(config.agentModel === 'haiku', `Claude agent ${RESOURCE_NAME} must use haiku`);
   const expectedAgentTools = EXPECTED_TOOLS.map((tool) => `mcp__${MCP_SERVER_NAME}__${tool}`);
-  add(expectedAgentTools.every((tool) => config.agentTools.includes(tool)),
+  add(config.agentTools.length === expectedAgentTools.length
+    && expectedAgentTools.every((tool) => config.agentTools.includes(tool)),
     `Claude agent ${RESOURCE_NAME} must be restricted to the local inference tools`);
-  add(normalizeUrl(config.litellmBaseUrl) === normalizeUrl(config.mcpEnv.LITELLM_BASE_URL),
+  add(normalizeUrl(config.litellmBaseUrl) === normalizeUrl(
+    config.mcpEnv.LITELLM_BASE_URL || config.mcpEnv.LITELLM_BASE,
+  ),
     'Claude local-inference LiteLLM URL is inconsistent');
   return errors;
 }
@@ -175,10 +199,12 @@ function configSignature(config) {
     litellmBaseUrl: config.litellmBaseUrl,
     model: config.model,
     mcpCommand: config.mcpCommand,
+    mcpType: config.mcpType,
     mcpArgs: config.mcpArgs,
     mcpCwd: config.mcpCwd,
-    mcpRequestTimeoutMs: config.mcpRequestTimeoutMs,
+    mcpToolTimeoutMs: config.mcpToolTimeoutMs,
     workerTimeoutMs: config.workerTimeoutMs,
+    workerMaxOutputTokens: config.workerMaxOutputTokens,
     agentName: config.agentName,
     agentModel: config.agentModel,
     agentTools: config.agentTools,
@@ -219,13 +245,14 @@ function withTimeout(promise, timeoutMs, message) {
 
 async function verifyLocalInferenceResource({
   projectDir,
+  env = process.env,
   cache = true,
   limits = DEFAULTS,
   fetchImpl = globalThis.fetch,
   mcpProbe = checkMcp,
 } = {}) {
   const startedAt = Date.now();
-  const config = resolveClaudeResourceConfig({ projectDir });
+  const config = resolveClaudeResourceConfig({ projectDir, env });
   const signature = configSignature(config);
   if (cache) {
     const cached = await readCache(signature, limits.cacheTtlMs);
@@ -233,6 +260,19 @@ async function verifyLocalInferenceResource({
   }
 
   const configurationErrors = validateConfiguration(config, limits);
+  if (configurationErrors.length) {
+    const result = makeResult(config, startedAt, configurationErrors, {
+      ok: false,
+      skipped: true,
+      error: 'Provider probe skipped because configuration is invalid',
+    }, {
+      ok: false,
+      skipped: true,
+      error: 'MCP probe skipped because configuration is invalid',
+    });
+    if (cache) await writeCache(signature, result);
+    return result;
+  }
   const providerPromise = checkLiteLLM(config, {
     timeoutMs: limits.providerTimeoutMs,
     fetchImpl,
@@ -252,7 +292,13 @@ async function verifyLocalInferenceResource({
     ...(provider.ok ? [] : [provider.error || 'LiteLLM provider health check failed']),
     ...(mcp.ok ? [] : [mcp.error || 'MCP worker health check failed']),
   ];
-  const result = {
+  const result = makeResult(config, startedAt, errors, provider, mcp);
+  if (cache) await writeCache(signature, result);
+  return result;
+}
+
+function makeResult(config, startedAt, errors, provider, mcp) {
+  return {
     ok: errors.length === 0,
     target: 'claude',
     checkedAt: new Date().toISOString(),
@@ -264,7 +310,7 @@ async function verifyLocalInferenceResource({
       model: config.model,
       providerBaseUrl: config.litellmBaseUrl,
       litellmBaseUrl: config.litellmBaseUrl,
-      mcpRequestTimeoutMs: config.mcpRequestTimeoutMs,
+      mcpToolTimeoutMs: config.mcpToolTimeoutMs,
       mcpToolTimeoutSec: config.mcpToolTimeoutSec,
       workerTimeoutMs: config.workerTimeoutMs,
       agentName: config.agentName,
@@ -275,12 +321,15 @@ async function verifyLocalInferenceResource({
     mcp,
     errors,
   };
-  if (cache) await writeCache(signature, result);
-  return result;
 }
 
 function isLocalMcpTool(toolName) {
   return /^mcp__local[-_]inference__/.test(toolName || '');
+}
+
+function isExpectedMcpToolInput(input) {
+  if (!isLocalMcpTool(input?.tool_name)) return false;
+  return input.mcp_server?.name === MCP_SERVER_NAME && input.mcp_server?.source === 'project';
 }
 
 async function readStdin() {
@@ -303,6 +352,15 @@ async function runHook(eventName) {
       if (!isLocalAgentInput(agentSelector(input))) return;
     } else if (!isLocalMcpTool(toolName)) {
       return;
+    } else if (!isExpectedMcpToolInput(input)) {
+      const result = {
+        ok: false,
+        elapsedMs: 0,
+        config: { model: process.env.LITELLM_MODEL || 'unconfigured', mcpToolTimeoutSec: 0 },
+        errors: ['Local inference MCP provenance is not the expected project server'],
+      };
+      process.stdout.write(`${JSON.stringify(hookResponse(eventName, result, { block: true }))}\n`);
+      return;
     }
   }
   if (eventName === 'SubagentStart' && !isLocalAgentInput(input.agent_type || input.agent_role)) return;
@@ -314,7 +372,7 @@ async function runHook(eventName) {
   }).catch((error) => ({
     ok: false,
     elapsedMs: 0,
-    config: { model: EXPECTED_MODEL, mcpToolTimeoutSec: 0 },
+    config: { model: process.env.LITELLM_MODEL || 'unconfigured', mcpToolTimeoutSec: 0 },
     provider: { ok: false },
     mcp: { ok: false },
     errors: [error.message],
@@ -349,10 +407,10 @@ module.exports = {
   DEFAULTS,
   MCP_SERVER_NAME,
   RESOURCE_NAME,
-  EXPECTED_MODEL,
   EXPECTED_TOOLS,
   agentSelector,
   isLocalMcpTool,
+  isExpectedMcpToolInput,
   parseFrontmatter,
   resolveClaudeResourceConfig,
   summarize,

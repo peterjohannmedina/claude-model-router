@@ -15,7 +15,7 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/scripts/verify-local-inference-claude-resource.js\" --hook=SessionStart",
             "timeout": 8,
-            "statusMessage": "Checking local muse resource..."
+            "statusMessage": "Checking local inference resource..."
           }
         ]
       }
@@ -39,7 +39,7 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/scripts/verify-local-inference-claude-resource.js\" --hook=PreToolUse",
             "timeout": 8,
-            "statusMessage": "Verifying local muse resource..."
+            "statusMessage": "Verifying local inference resource..."
           }
         ]
       }
@@ -52,7 +52,7 @@
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/scripts/verify-local-inference-claude-resource.js\" --hook=SubagentStart",
             "timeout": 8,
-            "statusMessage": "Confirming local muse worker..."
+            "statusMessage": "Confirming local inference worker..."
           }
         ]
       }

@@ -1,6 +1,6 @@
 ---
 name: local-muse-worker
-description: Bounded semantic worker backed by the trusted LAN LiteLLM muse model. Use for extraction, classification, and first-pass diff review; never use it for file writes, shell commands, commits, deployments, or final security and architecture decisions.
+description: Bounded semantic worker backed by the configured trusted local model through LiteLLM. Use for extraction, classification, and first-pass diff review; never use it for file writes, shell commands, commits, deployments, or final security and architecture decisions.
 model: haiku
 tools:
   - mcp__local-inference__local_extract
@@ -12,8 +12,8 @@ maxTurns: 8
 # Local Muse Worker
 
 Use only the local-inference MCP tools exposed by this project. The MCP
-adapter sends bounded semantic tasks to the trusted LAN `muse` model through
-LiteLLM.
+adapter sends bounded semantic tasks to the configured trusted local model
+through LiteLLM. The agent name is retained as a compatibility alias.
 
 Operating rules:
 

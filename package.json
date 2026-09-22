@@ -1,7 +1,7 @@
 {
   "name": "claude-model-router",
-  "version": "0.1.0",
-  "description": "MCP worker that lets Claude Code and Codex delegate bounded semantic tasks to a trusted LAN model served by LiteLLM.",
+  "version": "0.2.0",
+  "description": "Portable Claude Code model routing with native agent profiles, local LLM delegation, and bounded MCP tools.",
   "license": "ISC",
   "type": "commonjs",
   "main": "mcp/local-inference-mcp.js",
@@ -10,10 +10,14 @@
   },
   "scripts": {
     "mcp:local-inference": "node mcp/local-inference-mcp.js",
-    "test": "npm run test:mcp && npm run test:resource && npm run test:claude-resource",
+    "test": "node --test",
+    "install:routing": "node scripts/install.js",
     "test:mcp": "node --test tests/local-inference-mcp.test.js",
     "test:resource": "node --test tests/local-resource-verification.test.js",
     "test:claude-resource": "node --test tests/local-claude-resource-verification.test.js"
+  },
+  "engines": {
+    "node": ">=20.11"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",

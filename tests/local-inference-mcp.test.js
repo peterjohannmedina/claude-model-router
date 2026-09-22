@@ -31,6 +31,7 @@ function makeConfig(overrides = {}) {
     model: 'local-30b',
     maxInputChars: 10000,
     maxOutputTokens: 300,
+    maxUpstreamResponseBytes: 2_000_000,
     timeoutMs: 5000,
     temperature: 0,
     ...overrides,
@@ -64,6 +65,20 @@ test('loadConfig requires a LiteLLM base URL and validates transport', () => {
   assert.equal(config.port, 9000);
   assert.equal(config.model, 'muse-glimmer');
   assert.equal(config.chatCompletionsUrl, 'http://cluster.example:4000/v1/chat/completions');
+  assert.throws(
+    () => loadConfig({
+      LITELLM_BASE_URL: 'http://cluster.example:4000/v1',
+      MCP_TRANSPORT: 'http',
+      MCP_HOST: '0.0.0.0',
+    }),
+    /MCP_BEARER_TOKEN is required/,
+  );
+  assert.equal(loadConfig({
+    LITELLM_BASE_URL: 'http://cluster.example:4000/v1',
+    MCP_TRANSPORT: 'http',
+    MCP_HOST: '0.0.0.0',
+    MCP_BEARER_TOKEN: 'test-token',
+  }).host, '0.0.0.0');
 });
 
 test('parseJsonDocument accepts plain, fenced, and embedded JSON', () => {
@@ -142,6 +157,17 @@ test('LiteLLMClient names an exhausted output budget instead of a protocol fault
   );
 });
 
+test('LiteLLMClient rejects oversized upstream bodies before parsing them', async () => {
+  const client = new LiteLLMClient(makeConfig({ maxUpstreamResponseBytes: 32 }), async () => new Response(
+    JSON.stringify({ choices: [{ message: { content: 'x'.repeat(100) } }] }),
+    { status: 200 },
+  ));
+  await assert.rejects(
+    () => client.complete({ traceId: 't', system: 's', user: 'u' }),
+    (error) => error instanceof LocalInferenceError && error.code === 'upstream_response_too_large',
+  );
+});
+
 test('MCP tools call the local worker and return structured evidence', async () => {
   const config = makeConfig();
   const fakeClient = {
@@ -211,6 +237,58 @@ test('MCP tools reject oversized input before calling LiteLLM', async () => {
   await server.close();
 });
 
+test('classification rejects missing indexes and labels outside the allowed set', async () => {
+  const config = makeConfig();
+  const server = createMcpServer(config, {
+    async complete() {
+      return {
+        content: '{"items":[{"index":99,"label":"other","reason":"unsupported"}]}',
+        responseModel: config.model,
+      };
+    },
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 'test-client', version: '1.0.0' });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    const result = await client.callTool({
+      name: 'local_classify',
+      arguments: { items: ['x'], labels: ['yes', 'no'], criteria: 'Choose one.' },
+    });
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /invalid_model_output/);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
+
+test('diff review enforces its output shape and max_findings', async () => {
+  const config = makeConfig();
+  const server = createMcpServer(config, {
+    async complete() {
+      return {
+        content: '{"summary":3,"findings":[1,2],"abstain":"no"}',
+        responseModel: config.model,
+      };
+    },
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 'test-client', version: '1.0.0' });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    const result = await client.callTool({
+      name: 'local_review_diff',
+      arguments: { diff: '+change', rubric: 'Review it.', max_findings: 1 },
+    });
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /invalid_model_output/);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
+
 test('stateless Streamable HTTP serves the same MCP tools', async () => {
   const config = makeConfig({ port: 0 });
   const server = await startHttpServer(config, {
@@ -223,6 +301,10 @@ test('stateless Streamable HTTP serves the same MCP tools', async () => {
   });
   const address = server.address();
   const port = typeof address === 'object' && address ? address.port : 0;
+  const rebindingAttempt = await fetch(`http://127.0.0.1:${port}/healthz`, {
+    headers: { origin: 'https://attacker.example' },
+  });
+  assert.equal(rebindingAttempt.status, 403);
   const client = new Client({ name: 'http-test-client', version: '1.0.0' });
   const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`));
   await client.connect(transport);
