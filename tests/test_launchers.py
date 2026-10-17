@@ -20,6 +20,28 @@ import routing_installation as installation
 
 
 class LauncherDiagnostics(unittest.TestCase):
+    def test_reopen_accepts_canonical_parent_alias_but_refuses_linked_launch_file(self):
+        with tempfile.TemporaryDirectory(dir=ROOT.parent) as directory:
+            root=Path(directory).resolve()
+            state=root/'routing';state.mkdir()
+            launch=state/'.dashboard-launch-synthetic.html';launch.write_text('synthetic handoff')
+            alias=root/'alias'
+            if os.name=='nt':
+                import _winapi
+                _winapi.CreateJunction(str(root/'routing'),str(alias))
+            else:alias.symlink_to(state,target_is_directory=True)
+            paths=SimpleNamespace(state=alias)
+            with patch.object(bootstrap,'start',return_value={'instance_id':'synthetic'}), \
+                 patch.object(bootstrap,'controller',side_effect=lambda *_:{'launch_file':str(launch),'url':'http://127.0.0.1:1'}), \
+                 patch.object(bootstrap.webbrowser,'open') as browser:
+                result=bootstrap.open_dashboard(paths,browser=False)
+                self.assertEqual(result['private_launch_file'],str(launch));browser.assert_not_called()
+                with patch.object(Path,'is_symlink',return_value=True),self.assertRaisesRegex(ValueError,'invalid_private_launch_file'):
+                    bootstrap.open_dashboard(paths,browser=False)
+                paths.state=root/'elsewhere'
+                with self.assertRaisesRegex(ValueError,'invalid_private_launch_file'):
+                    bootstrap.open_dashboard(paths,browser=False)
+
     def probe(self, result=None, error=None):
         with patch.object(platform,'os',SimpleNamespace(name='nt')), \
              patch.object(platform.subprocess,'run',return_value=result,side_effect=error) as run:

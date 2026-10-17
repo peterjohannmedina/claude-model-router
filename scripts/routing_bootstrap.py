@@ -194,7 +194,12 @@ def open_dashboard(paths, otel=None, browser=True):
     started=start(paths,otel)
     result=controller(paths,'open')
     launch=Path(result.pop('launch_file'))
-    if launch.parent!=paths.state or not launch.name.startswith('.dashboard-launch-') or not launch.is_file():
+    # The server canonicalizes its root. macOS /var and /private/var may name
+    # the same allowed parent; compare identity after resolution, retaining
+    # containment and refusing a linked launch file itself.
+    if (launch.parent.resolve()!=paths.state.resolve()
+            or not launch.name.startswith('.dashboard-launch-') or not launch.is_file()
+            or launch.is_symlink() or getattr(launch.lstat(),'st_file_attributes',0)&0x400):
         raise ValueError('invalid_private_launch_file')
     try:opened=webbrowser.open(launch.as_uri()) if browser else False
     except (OSError,webbrowser.Error):opened=False

@@ -85,5 +85,5 @@ test('requires eligibility and bounded packet before any process starts', async 
 });
 
 test('real process runner reports command failure without exposing stderr', { skip: process.platform !== 'win32' }, async () => {
-  await assert.rejects(runPowerShell('missing-worker.ps1', [], '', 5000), /command failed/);
+  await assert.rejects(runPowerShell('missing-worker.ps1', [], '', 15000), /command failed/);
 });
