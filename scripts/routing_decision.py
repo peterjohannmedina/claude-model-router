@@ -154,6 +154,10 @@ class Request:
         for key in ("conservation_mode", "stronger_exception", "local_work_eligible", "require_local"):
             if type(value.get(key, False)) is not bool:
                 raise RoutingError("invalid_policy_flag")
+        required = value.get("required_modalities", ["text"])
+        if (not isinstance(required, list) or not required
+                or any(m not in ("text", "image", "audio") for m in required)):
+            raise RoutingError("invalid_required_modalities")
         catalog = value["available_models"]
         if not isinstance(catalog, dict):
             raise RoutingError("missing_catalog")
@@ -190,7 +194,8 @@ class Request:
                     return False
             else:
                 if (c.action != "delegate" or c.adapter not in ready
-                        or not value.get("local_work_eligible", False)):
+                        or not value.get("local_work_eligible", False)
+                        or any(m != "text" for m in required)):
                     return False
             if overrides.model is not None and c.model != overrides.model:
                 return False

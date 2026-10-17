@@ -454,7 +454,7 @@ def main(argv=None):
         print(json.dumps(result, allow_nan=False))
         return 2 if result.get('error') else 0
     try:
-        config_path = args.config or Path(os.environ.get('CLAUDE_CONFIG_DIR', Path.home() / '.claude')) / 'routing' / 'config.json'
+        config_path = args.config or state.state_root() / 'config.json'
         raw = core.load_file(config_path) if config_path.is_file() else {'schema_version': 1}
         if args.config and not config_path.is_file():
             raise core.RoutingError('config_not_found')

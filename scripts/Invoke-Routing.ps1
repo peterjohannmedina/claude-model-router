@@ -148,8 +148,8 @@ if (-not $routingPreflight.preflight.may_load_credential) {
 
 # Reached only after admission, hard ceilings and explicit consent. Never invoke
 # this branch without authority for spending and credential-loader use.
-# An explicitly supplied store wins. Otherwise prefer the configured environment
-# before discovering an existing store; never create or migrate credential data.
+# An explicitly supplied store wins. Otherwise use only the configured
+# environment; never discover, create or migrate credential data.
 if (-not $CredentialPath) {
     $routingResult = Invoke-RoutingPython -RoutingArguments $routingArguments -RoutingKey $null -PermitEnvironmentKey
     Write-RoutingChildResult $routingResult

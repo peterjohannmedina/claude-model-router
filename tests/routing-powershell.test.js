@@ -13,7 +13,7 @@ const directory = path.resolve(__dirname, '../skills/claude-model-routing/script
 
 function run(script, args = [], input = '', extraEnv = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(directory, script), ...args], {
+    const child = spawn(executable, ['-NoProfile', '-File', path.join(directory, script), ...args], {
       windowsHide: true, env: { ...process.env, ROUTER_TEST_KEY: 'synthetic-test-token', ...extraEnv },
     });
     let stdout = '', stderr = '';

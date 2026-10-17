@@ -1,7 +1,7 @@
 {
   "synthetic": true,
   "reviewed_source": "codex-model-routing:e8d686 (Claude adaptation; current working tree captured)",
-  "capture_source_commit": "f99e827f4902c4a5c4ab4a43cadb43d94676b3e6",
+  "capture_source_commit": "9d38f54c669cbe401df07a8f6e112e07252a3bfd",
   "fixture_sha256": "7c923a789f64664b1f54f1277458b3425115fe8641871cf379a4c8e3c859f813",
   "assets": {
     "assets/dashboard/index.html": {
@@ -23,10 +23,10 @@
       "sha256": "23a97947449966b67b3dc2c7b08b349f96b73521e13ff6eca74a08dd7aae4a2f"
     },
     "scripts/routing_runtime.py": {
-      "sha256": "c8046e927941f1a27a5e0b5949401196a4a52acde661f84db9285fe4dd7fa3bd"
+      "sha256": "faaf98dc0823c6f050d1b9bdafe28da5e5f7dfd3c57ab9a16e9a42fd01c958f9"
     },
     "scripts/routing_decision.py": {
-      "sha256": "f3b4e32ea7f90c11309f6d5e268f0a9a5b5fec2b018e727f121708937ed85245"
+      "sha256": "b4a1d74a40a239e340973c18021367dc243a7bb3295f14ac5aeb95a700b4502e"
     },
     "scripts/routing_otel.py": {
       "sha256": "56d481862e912b9dcde430fdcfc012df058f270015023d9bfe1fa34f49aed3fc"

@@ -1,8 +1,11 @@
 """Claude admission and optional-provider boundaries, entirely offline."""
 from datetime import datetime, timedelta, timezone
+from contextlib import redirect_stdout
+import io
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -15,6 +18,35 @@ from test_optional_providers import local_packet, configuration, catalog
 
 
 class ClaudeAdmission(unittest.TestCase):
+    def test_custom_state_directory_is_shared_with_dashboard_policy_and_catalog(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            custom = root / 'private-state'
+            custom.mkdir()
+            (custom / 'config.json').write_text(json.dumps({'schema_version': 1,
+                'observability': {'enabled': False}}))
+            (custom / 'model-catalog.json').write_text(json.dumps(native_catalog()))
+            task = root / 'packet.json'
+            task.write_text(json.dumps(packet()))
+            output = io.StringIO()
+            with patch.dict('os.environ', {'CLAUDE_CONFIG_DIR': str(root / 'claude'),
+                                          'CLAUDE_ROUTER_STATE_DIR': str(custom)}), redirect_stdout(output):
+                code = runtime.main([str(task), '--offline'])
+            result = json.loads(output.getvalue())
+            self.assertEqual(code, 0)
+            self.assertEqual(result['ledger']['status'], 'disabled')
+            self.assertFalse((root / 'claude').exists())
+            self.assertFalse((custom / 'usage.sqlite3').exists())
+
+    def test_text_local_adapter_rejects_image_and_audio_before_any_probe(self):
+        for modalities in (['image'], ['text', 'audio']):
+            value = local_packet()
+            value.update(required_modalities=modalities, require_local=True)
+            with self.subTest(modalities=modalities), self.assertRaisesRegex(core.RoutingError, 'require_local_unavailable'):
+                runtime.execute_local(value, configuration(True), environment={},
+                    transport=lambda *_: self.fail('unsupported modality contacted local provider'),
+                    allow_local_inference=True)
+
     def test_packet_model_list_is_not_account_confirmation(self):
         for evidence in (None, {'source': 'documented_alias_baseline', 'models': native_catalog()['models']},
                          {**native_catalog(), 'confirmed': False},

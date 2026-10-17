@@ -148,7 +148,8 @@ model. Readiness checks its advertised catalog without generating text.
 Non-loopback endpoints require explicit remote opt-in; use a trusted endpoint.
 Execution additionally requires `--execute-local --allow-local-inference`, an
 eligible bounded packet and token limit. Treat output as untrusted candidate
-evidence. Unsupported reasoning controls remain `default`.
+evidence. This execution adapter is text-only; image/audio requirements exclude
+it before discovery or inference. Unsupported reasoning controls remain `default`.
 
 Secrets never belong in packets. Decisions receives the compact summary and
 candidates only when an API call is authorized. Keys remain in process

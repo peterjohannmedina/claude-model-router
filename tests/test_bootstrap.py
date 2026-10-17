@@ -23,7 +23,11 @@ import routing_platform as platform
 class Fixture(unittest.TestCase):
     live_permissions=False
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory(prefix='routing-otel-setup-bootstrap-',dir=ROOT.parent)
+        # Live state uses the user's system Temp, not a CI checkout whose
+        # inherited permissions may grant other principals access. The real
+        # privacy checker remains required; no ACL is rewritten by the fixture.
+        directory=None if self.live_permissions else ROOT.parent
+        self.temp=tempfile.TemporaryDirectory(prefix='routing-otel-setup-bootstrap-',dir=directory)
         self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name)
         if self.live_permissions:
