@@ -24,4 +24,6 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm test
+      - run: node tests/test_dashboard_ui.js
+      - run: node tests/test_dashboard_ui_regressions.js
       - run: python -B -m unittest discover -s tests -v
