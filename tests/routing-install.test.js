@@ -8,7 +8,9 @@ const path = require('node:path');
 const { install, mergeInstructions } = require('../scripts/install');
 
 function fixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-install-'));
+  // macOS exposes its temporary root through /var -> /private/var. Use the
+  // canonical disposable root without weakening the installer's link refusal.
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'claude-install-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
 }

@@ -12,7 +12,7 @@ const { readPolicy, updatePolicy } = require('./manage-routing-policy');
 function runPowerShell(script, args, input, timeoutMs) {
   const executable = process.platform === 'win32' ? 'powershell.exe' : 'pwsh';
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+    const child = spawn(executable, ['-NoProfile', '-File',
       path.join(__dirname, script), ...args], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     let output = '';
     const decoder = new StringDecoder('utf8');

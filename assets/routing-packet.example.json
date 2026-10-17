@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "summary": "A bounded code-reading task with an explicit acceptance check; preserve existing context if switching will cost more than it saves.",
+  "available_models": {
+    "haiku": [
+      "default"
+    ],
+    "sonnet": [
+      "low",
+      "medium",
+      "high"
+    ],
+    "opus": [
+      "low",
+      "medium",
+      "high",
+      "max"
+    ]
+  },
+  "conservation_mode": false,
+  "stronger_exception": false,
+  "local_work_eligible": false,
+  "ready_adapters": [],
+  "ceilings": {},
+  "fallback_id": "stay_sonnet_low",
+  "candidates": [
+    {
+      "id": "stay_sonnet_low",
+      "action": "stay",
+      "model": "sonnet",
+      "effort": "low",
+      "description": "Preserve the current model and context; the parent selected this safe fallback."
+    },
+    {
+      "id": "haiku_default",
+      "action": "delegate",
+      "model": "haiku",
+      "effort": "default",
+      "description": "Bounded independent code reading with a clear success shape."
+    },
+    {
+      "id": "opus_low",
+      "action": "switch",
+      "model": "opus",
+      "effort": "low",
+      "description": "Consider only if sustained judgment needs outweigh context transfer and latency."
+    }
+  ]
+}

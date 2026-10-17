@@ -1,0 +1,30 @@
+name: Synthetic dashboard screenshots
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r tests/requirements-screenshots.txt
+      - run: python -m playwright install --with-deps chromium
+      - run: python -B tests/capture_dashboard.py --output-dir screenshot-artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-dashboard-screenshots
+          path: |
+            screenshot-artifacts/*.png
+            screenshot-artifacts/provenance.json
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,87 @@
+{
+  "synthetic": true,
+  "reviewed_source": "codex-model-routing:e8d686 (Claude adaptation; current working tree captured)",
+  "capture_source_commit": "9d38f54c669cbe401df07a8f6e112e07252a3bfd",
+  "fixture_sha256": "7c923a789f64664b1f54f1277458b3425115fe8641871cf379a4c8e3c859f813",
+  "assets": {
+    "assets/dashboard/index.html": {
+      "sha256": "26df567270457f408f57172a35f32dc190b302823990a6f219369d54c7705409"
+    },
+    "assets/dashboard/app.js": {
+      "sha256": "464e9d45ce5f88f63cfcd868568bec0beed4f4e3572361be1fcfc39f7b312b2c"
+    },
+    "assets/dashboard/style.css": {
+      "sha256": "ed0910c3429de16b8060673af59f4abf368bdd4c27f155c37b3066844589b070"
+    },
+    "assets/dashboard/router-mark.svg": {
+      "sha256": "b851d459c12cd46e564e1f5a271de11592d8aec34160f39c42e2cabfa90d7029"
+    },
+    "scripts/routing_dashboard.py": {
+      "sha256": "4a79bf18fda7eda36ca83a7cc36291a0ceab4c7053e7097938d9e9d1e555e9cf"
+    },
+    "scripts/routing_state.py": {
+      "sha256": "23a97947449966b67b3dc2c7b08b349f96b73521e13ff6eca74a08dd7aae4a2f"
+    },
+    "scripts/routing_runtime.py": {
+      "sha256": "faaf98dc0823c6f050d1b9bdafe28da5e5f7dfd3c57ab9a16e9a42fd01c958f9"
+    },
+    "scripts/routing_decision.py": {
+      "sha256": "b4a1d74a40a239e340973c18021367dc243a7bb3295f14ac5aeb95a700b4502e"
+    },
+    "scripts/routing_otel.py": {
+      "sha256": "56d481862e912b9dcde430fdcfc012df058f270015023d9bfe1fa34f49aed3fc"
+    },
+    "scripts/routing_catalog.py": {
+      "sha256": "73443b139116a441bb2099efacc1091678a1c8a19fe01db2dc3c2acfbc4ada04"
+    }
+  },
+  "images": {
+    "dashboard-overview.png": {
+      "sha256": "dc75ee0b55ee5da7dda30bce18ce972c00bb57b9d62a0f905c4113db3dd26ea7",
+      "width": 1440,
+      "height": 1321,
+      "bytes": 105737
+    },
+    "dashboard-providers.png": {
+      "sha256": "9351da6e5946edfdf93450b9a22c41faa79af1bfeb623cab735385f8b2b27a25",
+      "width": 1256,
+      "height": 1487,
+      "bytes": 128696
+    },
+    "dashboard-activity.png": {
+      "sha256": "d71d2bc7461c7af3704424ea3bb5f820075d7cd309ded7c79fe092222e2fe2c3",
+      "width": 1256,
+      "height": 1467,
+      "bytes": 106415
+    }
+  },
+  "playwright_version": "1.64.0",
+  "browser": "Chromium 153.0.8010.12",
+  "locale": "en-US",
+  "timezone": "UTC",
+  "device_scale_factor": 1,
+  "viewport_width": 1440,
+  "fixture_clock": "2026-10-15T14:35:00+00:00",
+  "network_paths": [
+    "GET /",
+    "GET /api/session",
+    "GET /api/state",
+    "GET /app.js",
+    "GET /router-mark.svg",
+    "GET /style.css",
+    "POST /api/auth"
+  ],
+  "provider_calls": 0,
+  "external_browser_requests": 0,
+  "real_user_data": false,
+  "browser_invalid_save_cases": [
+    "decisions-key-env:invalid_key_environment_name",
+    "decisions-key-env:missing_key_environment_name",
+    "local-key-env:invalid_key_environment_name"
+  ],
+  "configuration_posts": 0,
+  "credential_transmissions": 0,
+  "invalid_save_config_unchanged": true,
+  "browser_expansion_polling_regression": true,
+  "note": "Current fingerprinted HTML/CSS/JS and backend; only generated fixtures and the displayed observation clock are synthetic. No image editing or UI DOM substitution."
+}

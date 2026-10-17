@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" role="img" aria-labelledby="title">
+  <title id="title">Independent Claude routing tool</title>
+  <rect width="40" height="40" rx="11" fill="#245c43"/>
+  <g fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m9 14 6 6-6 6M20 20h5m0 0v-7h5m-5 7v7h5"/>
+  </g>
+  <g fill="#fff"><circle cx="31" cy="13" r="2"/><circle cx="31" cy="27" r="2"/></g>
+</svg>

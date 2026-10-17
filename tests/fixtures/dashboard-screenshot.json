@@ -1,0 +1,335 @@
+{
+  "synthetic": true,
+  "snapshot_time": "2026-10-15T14:35:00+00:00",
+  "config": {
+    "schema_version": 1,
+    "decisions": {
+      "enabled": true,
+      "api_key_env": "OPENAI_API_KEY",
+      "timeout_seconds": 3,
+      "minimum_confidence": 0.6
+    },
+    "local": {
+      "enabled": true,
+      "base_url": "http://127.0.0.1:8000/v1",
+      "model": "synthetic-local-model",
+      "api_key_env": "LOCAL_LLM_API_KEY",
+      "timeout_seconds": 2,
+      "max_output_tokens": 512,
+      "efforts": [
+        "default"
+      ],
+      "allow_remote": false,
+      "prefer_when_eligible": true
+    },
+    "observability": {
+      "enabled": true,
+      "retention_days": 7,
+      "max_events": 500,
+      "local_input_usd_per_million": 0.1,
+      "local_output_usd_per_million": 0.3
+    },
+    "native": {
+      "allowed_models": [
+        "sonnet",
+        "haiku"
+      ]
+    }
+  },
+  "events": [
+    {
+      "source": "router",
+      "session_id": "11111111-1111-4111-8111-111111111111",
+      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      "stage": 2,
+      "mode": "recommend",
+      "model": "sonnet",
+      "effort": "low",
+      "adapter": "native",
+      "model_source": "router_recommendation",
+      "execution_status": "unobserved",
+      "local_status": "disabled",
+      "evaluator_attempts": 0,
+      "evaluator_usage": {
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "observed_at": "2026-10-12T09:00:00+00:00"
+    },
+    {
+      "source": "claude_exec",
+      "session_id": "11111111-1111-4111-8111-111111111111",
+      "session_source": "claude_thread",
+      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+      "stage": 2,
+      "mode": "exec_stream",
+      "model": "sonnet",
+      "effort": "low",
+      "adapter": "native",
+      "model_source": "collector_annotation",
+      "stream_status": "closed",
+      "execution_status": "completed",
+      "downstream_attempts": 1,
+      "downstream_usage": {
+        "input_tokens": 8400,
+        "output_tokens": 1000,
+        "cached_input_tokens": 3000
+      },
+      "evaluator_attempts": 0,
+      "evaluator_usage": {
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "command_items": 3,
+      "observed_at": "2026-10-13T10:00:00+00:00"
+    },
+    {
+      "source": "router",
+      "session_id": "22222222-2222-4222-8222-222222222222",
+      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+      "stage": 2,
+      "mode": "recommend",
+      "model": "sonnet",
+      "effort": "low",
+      "adapter": "native",
+      "model_source": "router_recommendation",
+      "execution_status": "unobserved",
+      "local_status": "ready",
+      "evaluator_attempts": 1,
+      "evaluator_usage": {
+        "input_tokens": 640,
+        "output_tokens": 0
+      },
+      "observed_at": "2026-10-13T11:00:00+00:00",
+      "requested_provider": "decisions",
+      "used_provider": "decisions",
+      "evaluator_status": "succeeded",
+      "evaluator_attempted": true,
+      "evaluator_succeeded": true,
+      "evaluator_fallback": false,
+      "evaluator_reason": null,
+      "evaluator_model": "gpt-6-luna",
+      "policy_version": "synthetic-v1",
+      "confidence": 0.78,
+      "selection_elapsed_ms": 110,
+      "elapsed_ms": 125,
+      "selected_candidate_id": "sonnet_low",
+      "selected_action": "stay",
+      "admitted_choices": [
+        {
+          "id": "sonnet_low",
+          "model": "sonnet",
+          "effort": "low",
+          "adapter": "native",
+          "action": "stay"
+        },
+        {
+          "id": "haiku_high",
+          "model": "haiku",
+          "effort": "high",
+          "adapter": "native",
+          "action": "delegate"
+        }
+      ],
+      "choice_probabilities": {
+        "sonnet_low": 0.78,
+        "haiku_high": 0.22
+      }
+    },
+    {
+      "source": "router",
+      "session_id": "22222222-2222-4222-8222-222222222222",
+      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4",
+      "stage": 2,
+      "mode": "local_execute",
+      "model": "synthetic-local-model",
+      "effort": "default",
+      "adapter": "local",
+      "model_source": "router_recommendation",
+      "execution_adapter": "local",
+      "execution_model": "synthetic-local-model",
+      "execution_effort": "default",
+      "execution_status": "completed",
+      "local_status": "ready",
+      "downstream_attempts": 1,
+      "downstream_usage": {
+        "input_tokens": 1800,
+        "output_tokens": 240
+      },
+      "evaluator_attempts": 0,
+      "evaluator_usage": {
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "observed_at": "2026-10-14T09:30:00+00:00"
+    },
+    {
+      "source": "router",
+      "session_id": "11111111-1111-4111-8111-111111111111",
+      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5",
+      "stage": 2,
+      "mode": "recommend",
+      "model": "sonnet",
+      "effort": "high",
+      "adapter": "native",
+      "model_source": "router_recommendation",
+      "override_effort": "high",
+      "fallback_reason": "api_not_authorized",
+      "execution_status": "unobserved",
+      "local_status": "network",
+      "evaluator_attempts": 0,
+      "evaluator_usage": {
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "observed_at": "2026-10-14T11:00:00+00:00"
+    },
+    {
+      "source": "router",
+      "session_id": "22222222-2222-4222-8222-222222222222",
+      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6",
+      "stage": 2,
+      "mode": "recommend",
+      "model": "sonnet",
+      "effort": "low",
+      "adapter": "native",
+      "model_source": "router_recommendation",
+      "fallback_reason": "refusal",
+      "execution_status": "unobserved",
+      "local_status": "ready",
+      "evaluator_attempts": 1,
+      "evaluator_usage": {
+        "input_tokens": 430,
+        "output_tokens": 0
+      },
+      "observed_at": "2026-10-15T10:00:00+00:00"
+    },
+    {
+      "source": "claude_exec",
+      "session_id": "11111111-1111-4111-8111-111111111111",
+      "session_source": "claude_thread",
+      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7",
+      "stage": 2,
+      "mode": "exec_stream",
+      "adapter": "native",
+      "model_source": "unobserved",
+      "stream_status": "closed",
+      "execution_status": "completed",
+      "downstream_attempts": 1,
+      "downstream_usage": {
+        "input_tokens": 12500,
+        "output_tokens": 1400,
+        "cached_input_tokens": 10000
+      },
+      "evaluator_attempts": 0,
+      "evaluator_usage": {
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "command_items": 5,
+      "observed_at": "2026-10-15T13:00:00+00:00"
+    },
+    {
+      "source": "router",
+      "session_id": "22222222-2222-4222-8222-222222222222",
+      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa8",
+      "stage": 2,
+      "mode": "local_execute",
+      "model": "synthetic-local-model",
+      "effort": "default",
+      "adapter": "local",
+      "model_source": "router_recommendation",
+      "execution_adapter": "local",
+      "execution_model": "synthetic-local-model",
+      "execution_effort": "default",
+      "execution_status": "completed",
+      "local_status": "ready",
+      "downstream_attempts": 1,
+      "downstream_usage": {
+        "input_tokens": 620,
+        "output_tokens": 90
+      },
+      "evaluator_attempts": 0,
+      "evaluator_usage": {
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      "observed_at": "2026-10-15T14:30:00+00:00"
+    },
+    {
+      "source": "claude_hook",
+      "session_id": "22222222-2222-4222-8222-222222222222",
+      "session_source": "claude_thread",
+      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9",
+      "stage": 2,
+      "mode": "hook_session",
+      "model": "sonnet",
+      "model_source": "hook_metadata",
+      "execution_status": "session_observed",
+      "contract_validation": "documented_hook_schema",
+      "observed_at": "2026-10-15T14:30:00+00:00"
+    },
+    {
+      "source": "claude_hook",
+      "session_id": "22222222-2222-4222-8222-222222222222",
+      "session_source": "claude_thread",
+      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "stage": 2,
+      "mode": "hook_stop",
+      "model": null,
+      "model_source": "hook_metadata",
+      "execution_status": "stop_observed",
+      "contract_validation": "documented_hook_schema",
+      "observed_at": "2026-10-15T14:31:00+00:00"
+    }
+  ],
+  "model_catalog": {
+    "status": "queried",
+    "source": "claude_model_picker_confirmation",
+    "queried_at": "2026-10-15T14:35:00+00:00",
+    "entitlement": "user_confirmed",
+    "scope_verified": false,
+    "remote_freshness": "unverified",
+    "models": [
+      {
+        "id": "haiku",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "default_effort": "medium",
+        "input_modalities": [
+          "text"
+        ],
+        "policy_supported": true
+      },
+      {
+        "id": "sonnet",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "default_effort": "medium",
+        "input_modalities": [
+          "text"
+        ],
+        "policy_supported": true
+      },
+      {
+        "id": "opus",
+        "efforts": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "default_effort": "medium",
+        "input_modalities": [
+          "text"
+        ],
+        "policy_supported": true
+      }
+    ]
+  }
+}
