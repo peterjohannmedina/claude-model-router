@@ -1,7 +1,7 @@
 {
   "name": "claude-model-router",
-  "version": "0.2.0",
-  "description": "Portable Claude Code model routing with native agent profiles, local LLM delegation, and bounded MCP tools.",
+  "version": "0.3.0",
+  "description": "Claude Code routing with a localhost dashboard, optional Decisions provider, generic local workers and redacted telemetry.",
   "license": "ISC",
   "type": "commonjs",
   "main": "mcp/local-inference-mcp.js",

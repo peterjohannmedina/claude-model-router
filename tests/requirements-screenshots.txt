@@ -1,0 +1,2 @@
+# CI/development screenshots only; runtime uses the Python standard library.
+playwright==1.64.0

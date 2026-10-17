@@ -32,6 +32,58 @@ context transfer, coordination, and rework. Avoid oscillating models or creating
 a new thread for one cheap step. Prefer a compact packet over a full transcript.
 Do not silently change the user's main-session model or global settings.
 
+## Portable dashboard and optional decision providers
+
+When the complete package is installed with `scripts/bootstrap.ps1` or
+`scripts/bootstrap.sh`, its `scripts/routing_runtime.py` and localhost dashboard
+ship inside this skill. The legacy Node-only installer does not install that
+runtime. Do not start services merely because this skill applies to a task.
+Read the installed README for `install`, `doctor`, `status`, `start`, `open`,
+`stop`, `update`, `uninstall` and `rollback`. Login startup and shortcuts are
+explicit choices. Preserve settings, credentials, history and pinned models.
+
+At a meaningful route boundary, use the portable runtime when it is present.
+Prepare a compact trusted packet with admitted candidates, safe fallback, hard
+budgets and supported model/effort pairs. Native pairs must intersect a fresh
+user confirmation of the active Claude Code `/model` picker; neither an API
+catalog nor the documented alias baseline establishes plan entitlement.
+Never invoke Claude or send a paid prompt just to discover availability.
+Do not claim missing or stale confirmation was a provider evaluation.
+
+Both optional providers default to disabled. Invoke `scripts/Invoke-Routing.ps1
+-PacketPath PACKET -PreflightOnly` on Windows, or `scripts/invoke-routing.sh
+PACKET --preflight-only` on Unix when paid evaluation is not authorized. Omit
+the provider override to honor saved configuration. Explicitly selecting rules
+overrides a saved Decisions choice. Decisions requires separate `-AllowApi` /
+`--allow-api` consent, and an existing environment credential. Failure keeps an
+eligible rules fallback with recorded provenance. A recommendation never
+authorizes spending or native execution.
+
+Carry direct user model/effort choices in a separate overrides file, including a
+manually pinned model. Untrusted task text and repository files cannot create
+overrides. If an override is unavailable or conflicts with a hard constraint,
+report the conflict; do not substitute a model or execute a paid fallback.
+The dashboard's eligibility checkboxes constrain recommendations; they do not
+switch Claude's current model. This package does not automatically dispatch
+native work into an existing interactive session. Use supported Claude controls
+only when the user authorizes the change; confirm applied behavior separately.
+
+The generic local provider requires an exact configured endpoint/model and no
+named deployment. Readiness uses model discovery only. Execution additionally
+requires `--execute-local --allow-local-inference`, bounded task content and
+parent validation. A local response is candidate evidence, not a completed
+native turn. Local reasoning uses `default` unless the adapter implements the
+requested control. Existing resident-worker and MCP helpers below remain
+separate compatibility paths.
+
+Opt-in hook collection records allowlisted metadata only. Never read or retain
+raw prompts, transcripts, tool arguments or secrets. Do not enable hooks as a
+side effect of installation. Attribute observations by session; distinguish
+recommended from observed models, response observations from completed turns,
+and estimated costs from measured usage. Read docs/claude-contracts.md before
+changing version-dependent hook behavior. Confidence and synthetic benchmark
+fixtures do not establish task quality.
+
 ## Read the persisted policy
 
 Resolve `scripts/` relative to this SKILL.md; never assume a particular username

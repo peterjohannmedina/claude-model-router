@@ -1,0 +1,27 @@
+name: Offline routing tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  routing:
+    timeout-minutes: 15
+    env:
+      ROUTING_REQUIRE_HTTP_TESTS: '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ['3.11', '3.12']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm test
+      - run: python -B -m unittest discover -s tests -v

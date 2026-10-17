@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "suite_id": "toy-routing-v1",
+  "synthetic": true,
+  "cases": [
+    {
+      "id": "csv",
+      "split": "holdout",
+      "check_id": "csv_sort_exact",
+      "packet": {
+        "schema_version": 1,
+        "summary": "Public synthetic CSV transformation with deterministic exact-output checks.",
+        "available_models": {
+          "sonnet": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "haiku": [
+            "default"
+          ]
+        },
+        "conservation_mode": false,
+        "fallback_id": "sonnet_low",
+        "candidates": [
+          {
+            "id": "sonnet_low",
+            "model": "sonnet",
+            "effort": "low",
+            "action": "stay",
+            "adapter": "native"
+          },
+          {
+            "id": "haiku_default",
+            "model": "haiku",
+            "effort": "default",
+            "action": "delegate",
+            "adapter": "native"
+          }
+        ]
+      }
+    },
+    {
+      "id": "range",
+      "split": "holdout",
+      "check_id": "inclusive_range_tests",
+      "packet": {
+        "schema_version": 1,
+        "summary": "Public synthetic Python inclusive-range off-by-one repair with boundary tests.",
+        "available_models": {
+          "sonnet": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "haiku": [
+            "default"
+          ]
+        },
+        "conservation_mode": false,
+        "fallback_id": "sonnet_low",
+        "candidates": [
+          {
+            "id": "sonnet_low",
+            "model": "sonnet",
+            "effort": "low",
+            "action": "stay",
+            "adapter": "native"
+          },
+          {
+            "id": "haiku_default",
+            "model": "haiku",
+            "effort": "default",
+            "action": "delegate",
+            "adapter": "native"
+          }
+        ]
+      }
+    },
+    {
+      "id": "conservation",
+      "split": "development",
+      "check_id": "admission_only",
+      "packet": {
+        "schema_version": 1,
+        "summary": "Public synthetic conservation admission case; no execution.",
+        "available_models": {
+          "sonnet": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "haiku": [
+            "default"
+          ]
+        },
+        "conservation_mode": true,
+        "fallback_id": "sonnet_low",
+        "candidates": [
+          {
+            "id": "sonnet_low",
+            "model": "sonnet",
+            "effort": "low",
+            "action": "stay",
+            "adapter": "native"
+          },
+          {
+            "id": "haiku_default_conserve",
+            "model": "haiku",
+            "effort": "default",
+            "action": "delegate",
+            "adapter": "native"
+          }
+        ]
+      }
+    }
+  ]
+}

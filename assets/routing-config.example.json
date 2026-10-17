@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "native": {"allowed_models": null},
+  "decisions": {
+    "enabled": false,
+    "api_key_env": "OPENAI_API_KEY",
+    "timeout_seconds": 3,
+    "minimum_confidence": 0.6
+  },
+  "local": {
+    "enabled": false,
+    "base_url": null,
+    "model": null,
+    "api_key_env": null,
+    "timeout_seconds": 2,
+    "max_output_tokens": 512,
+    "efforts": ["default"],
+    "allow_remote": false,
+    "prefer_when_eligible": false
+  },
+  "observability": {
+    "enabled": true,
+    "retention_days": 7,
+    "max_events": 500,
+    "local_input_usd_per_million": null,
+    "local_output_usd_per_million": null
+  }
+}
