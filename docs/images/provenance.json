@@ -1,26 +1,26 @@
 {
   "synthetic": true,
   "reviewed_source": "codex-model-routing:e8d686 (Claude adaptation; current working tree captured)",
-  "capture_source_commit": "9d38f54c669cbe401df07a8f6e112e07252a3bfd",
-  "fixture_sha256": "7c923a789f64664b1f54f1277458b3425115fe8641871cf379a4c8e3c859f813",
+  "capture_source_commit": "45063ce3f61aa477edede286061f27ae9843fa6e",
+  "fixture_sha256": "13fe6955928369a9ad4a97e04e7bc769982503304ed4c8dea0463f57330a2433",
   "assets": {
     "assets/dashboard/index.html": {
-      "sha256": "26df567270457f408f57172a35f32dc190b302823990a6f219369d54c7705409"
+      "sha256": "c2fd861bee28858699225ce2de8ba17bd5403ba1bf371fc8ca7c1026712b15fd"
     },
     "assets/dashboard/app.js": {
-      "sha256": "464e9d45ce5f88f63cfcd868568bec0beed4f4e3572361be1fcfc39f7b312b2c"
+      "sha256": "b9235da12dceeff39f7a91447d2697011fecf95c4701da614d0fd736e723d5e5"
     },
     "assets/dashboard/style.css": {
-      "sha256": "ed0910c3429de16b8060673af59f4abf368bdd4c27f155c37b3066844589b070"
+      "sha256": "98864644fde71f50fd3a1d31e6a95e8fd0ccace30ba3f433c163b1dff11e44a8"
     },
     "assets/dashboard/router-mark.svg": {
       "sha256": "b851d459c12cd46e564e1f5a271de11592d8aec34160f39c42e2cabfa90d7029"
     },
     "scripts/routing_dashboard.py": {
-      "sha256": "4a79bf18fda7eda36ca83a7cc36291a0ceab4c7053e7097938d9e9d1e555e9cf"
+      "sha256": "503b4366dcb54eaebbbf6d2ebf00e0f307d848b6c08e43851ba5518ea8d9ef3c"
     },
     "scripts/routing_state.py": {
-      "sha256": "23a97947449966b67b3dc2c7b08b349f96b73521e13ff6eca74a08dd7aae4a2f"
+      "sha256": "ada21c6341d3899d51d7d8c9d46065f1a4ed95b5a8b51329920153099640479d"
     },
     "scripts/routing_runtime.py": {
       "sha256": "faaf98dc0823c6f050d1b9bdafe28da5e5f7dfd3c57ab9a16e9a42fd01c958f9"
@@ -29,7 +29,7 @@
       "sha256": "b4a1d74a40a239e340973c18021367dc243a7bb3295f14ac5aeb95a700b4502e"
     },
     "scripts/routing_otel.py": {
-      "sha256": "56d481862e912b9dcde430fdcfc012df058f270015023d9bfe1fa34f49aed3fc"
+      "sha256": "03de60dc4513c0ddf8505c3f54fa0c5f633678daa19d9cf0027ee0aba66453fd"
     },
     "scripts/routing_catalog.py": {
       "sha256": "73443b139116a441bb2099efacc1091678a1c8a19fe01db2dc3c2acfbc4ada04"
@@ -37,26 +37,26 @@
   },
   "images": {
     "dashboard-overview.png": {
-      "sha256": "dc75ee0b55ee5da7dda30bce18ce972c00bb57b9d62a0f905c4113db3dd26ea7",
+      "sha256": "f67a6cc6645718a3481333bcedf740f32bf7a11625354a85a0605fed1fb67ca8",
       "width": 1440,
-      "height": 1321,
-      "bytes": 105737
+      "height": 2453,
+      "bytes": 345826
     },
     "dashboard-providers.png": {
-      "sha256": "9351da6e5946edfdf93450b9a22c41faa79af1bfeb623cab735385f8b2b27a25",
+      "sha256": "9a2f22d9bf3c8541c0ec7e80e790d5fbf91e77948258c4435bff101be9286325",
       "width": 1256,
-      "height": 1487,
-      "bytes": 128696
+      "height": 1508,
+      "bytes": 228405
     },
     "dashboard-activity.png": {
-      "sha256": "d71d2bc7461c7af3704424ea3bb5f820075d7cd309ded7c79fe092222e2fe2c3",
+      "sha256": "00c2ef89e4fdd6dc6034dece96118e983b5244ec500259f6fc161d7a67456ec0",
       "width": 1256,
-      "height": 1467,
-      "bytes": 106415
+      "height": 1617,
+      "bytes": 192760
     }
   },
   "playwright_version": "1.64.0",
-  "browser": "Chromium 153.0.8010.12",
+  "browser": "Chromium 156.0.8078.4",
   "locale": "en-US",
   "timezone": "UTC",
   "device_scale_factor": 1,

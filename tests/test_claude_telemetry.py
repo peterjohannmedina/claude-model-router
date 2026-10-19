@@ -125,6 +125,7 @@ class TelemetryTests(unittest.TestCase):
         with patch.object(Path, 'read_text', side_effect=AssertionError('transcript read')):
             result = collector.collect(io.BytesIO(json.dumps(hook()).encode()), ledger)
         self.assertEqual(result['accepted'], 1)
+        self.assertEqual(ledger.value['collection_transport'], 'stdin')
         self.assertNotIn(SECRET, json.dumps(ledger.value))
         with self.assertRaisesRegex(ValueError, 'body_limit'):
             collector.collect(io.BytesIO(b'X' * (hooks.MAX_BYTES + 1)), ledger)

@@ -15,7 +15,8 @@ def collect(stream, ledger, producer_version=None, event_id=None):
     records = hooks.decode(raw)
     if len(records) != 1:
         raise ValueError('one_hook_per_invocation')
-    event = hooks.metadata(records[0], producer_version=producer_version, event_id=event_id)
+    event = hooks.metadata(records[0], producer_version=producer_version, event_id=event_id,
+                           collection_transport='stdin')
     if event is None:
         return {'accepted': 0, 'ignored': 1, 'rejected': 0}
     ledger.put(event)

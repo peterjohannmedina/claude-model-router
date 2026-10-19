@@ -6,3 +6,5 @@ fieldset{border:1px solid var(--line,#d7e0dd);border-radius:8px;margin:16px 0;pa
 .router-mark{display:block;flex:none}.metrics.observed{grid-template-columns:repeat(2,1fr)}
 
 .picker-import{margin:1rem 0;padding:1rem;border:1px solid var(--line,#d6d9df);border-radius:10px}.picker-import summary{display:list-item;list-style:disclosure-closed;cursor:pointer;font-weight:600}.picker-import[open] summary{list-style:disclosure-open}.picker-import textarea{width:100%;box-sizing:border-box;max-width:100%;font:inherit;font-size:.85rem;padding:.7rem;border:1px solid #c9cdd4;border-radius:6px;resize:vertical}
+
+.telemetry-health{margin-top:20px}.telemetry-health h3{margin-top:16px}.session-observations{display:grid;gap:16px;margin-top:20px}.session-evidence{border-top:1px solid var(--border);padding-top:10px;overflow-wrap:anywhere}.session-evidence h3{font-size:12px}.session-evidence dl{display:grid;grid-template-columns:minmax(150px,240px) minmax(0,1fr);gap:8px 18px;font-size:12px}.session-evidence dt{color:var(--muted)}.session-evidence dd{margin:0}@media(max-width:560px){.session-evidence dl{grid-template-columns:1fr;gap:3px}.session-evidence dd{margin-bottom:9px}}

@@ -1,6 +1,6 @@
 # Claude Code integration contracts
 
-Verified against the official pages below on **2026-10-17 UTC**. These are mutable documentation observations, not verification of an installed Claude version, account, subscription, or live inference. Research and tests made no model calls and changed no installed Claude configuration.
+Model/effort contracts checked **2026-10-17 UTC**; telemetry contracts refreshed **2026-10-19 UTC**. These are mutable documentation observations, not verification of an installed Claude version, account, subscription, or live inference. Research and tests made no model calls and changed no installed Claude configuration.
 
 ## Model selection and effort
 
@@ -49,6 +49,8 @@ An explicitly ineligible `policy_supported: false` row invalidates the import or
 Official hooks receive JSON over stdin or HTTP. Common metadata includes `session_id`, optional `prompt_id`, and sometimes `effort.level`. Only `SessionStart` can include `model`, and it can be absent. `PostModelSwitch` uses `from_model`/`to_model`, requires v2.1.251, and observes session changes including automatic fallback; a temporary per-turn fallback chain does not fire it. `PostCompact` supplies `compact_summary`; `Stop`/`SubagentStop` can supply assistant text. The documented common hook schema does not require a producer version. [Official hooks reference](https://code.claude.com/docs/en/hooks)
 
 Status-line JSON separately documents `version`, `model.id`, `effort.level`, and optional rate limits. It is a distinct input contract; do not substitute it into hooks. [Official status-line schema](https://code.claude.com/docs/en/statusline)
+
+The optional separate status-line collector now supports ongoing snapshots. Its context counters describe the current context/latest response, not cumulative session usage; cost is a client estimate. Snapshot model labels describe observed session configuration, not verified responding models. See [ongoing telemetry](continuous-telemetry.md) for cadence, exact privacy boundaries, configuration declarations and preserving an existing display. No OTLP receiver is added by this collector.
 
 OTel uses resource `service.version`; Desktop Code sessions can report the Desktop app version. The API request event uses `event.name: api_request`, model/effort metadata, and token fields. Its input tokens exclude cache reads/writes. Export is opt-in, and optional logging switches can expose prompts or tool content. [Official monitoring guide](https://code.claude.com/docs/en/monitoring-usage)
 

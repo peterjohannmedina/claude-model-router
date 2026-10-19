@@ -19,7 +19,7 @@ with separate [Claude contracts](docs/claude-contracts.md) and
 | Local LLM | Exact model on a generic Chat Completions endpoint | No Muse dependency; execution separately authorized |
 | Efficiency | Output bounds, evaluator token/cost ceilings, local preference | Estimates labeled; no guaranteed subscription savings |
 | Decision records | Alternatives/probabilities, confidence, evaluator/policy provenance, latency | Confidence is not answer quality |
-| Telemetry | Opt-in hook metadata attributed by session | Observed models and completed turns distinct; usage may be unknown |
+| Telemetry | Opt-in lifecycle hooks and ongoing status-line snapshots, attributed by session | Context counters, client cost estimates and execution usage stay separate |
 | Lifecycle | Versioned install, detached start/reopen, optional startup, rollback | Preserves credentials, model settings and security policy |
 | Benchmark | Frozen synthetic suite and validated caller-supplied outcomes | No live-model quality claim from synthetic data |
 
@@ -158,11 +158,20 @@ in URLs, labels, dashboard fields or committed files.
 
 ## Opt-in session telemetry
 
-The collector consumes one supported Claude lifecycle-hook JSON object on stdin
-and retains allowlisted metadata. It does not read transcripts or retain prompt/
-tool content. Hook configuration is a separate user action; installation never
-edits settings to enable it. See [the contracts and hook example](docs/claude-contracts.md)
-for event fields, command quoting and version limitations.
+Separate collectors consume supported Claude lifecycle-hook and status-line
+JSON on stdin and retain allowlisted metadata. A SessionStart-only feed normally
+stays quiet during ongoing work. Status-line snapshots add current configuration,
+context counters and client timing/cost estimates where the harness reports
+them. Repeated snapshots refresh last-seen time without multiplying usage.
+Neither collector reads transcripts or retains prompt/tool content.
+
+Activation is a separate user action; installation never changes hooks or the
+existing status-line display. See [ongoing telemetry and safe integration](docs/continuous-telemetry.md)
+for configuration declarations, receipt/staleness semantics, preserving an
+existing display and rollback, and [the hook contracts](docs/claude-contracts.md)
+for lifecycle fields and version limits. A configured collector and a recent
+receipt are separate facts. The optional HTTP receiver can be disabled while
+stdin metadata is being recorded successfully.
 
 Per-session records distinguish recommended from observed models, response
 observations from completed turns, estimated costs from measured usage, and

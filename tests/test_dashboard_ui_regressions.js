@@ -210,4 +210,33 @@ async function restoredTabState(){
   expanded.snapshot().events=[{source:'router',session_id:scope,request_id:scope}];expanded.poll();await flush();
   assert.equal(expanded.nodes.events.children[0].open,true,'reload lost expanded observation');
 }
-(async()=>{const selected=process.argv[2];if(!selected||selected==='restore')await restoredTabState();if(!selected||selected==='anchors')await anchors();if(!selected||selected==='save')await delayedSave();if(!selected||selected==='poll')await stalePoll();if(!selected||selected==='auth')await expiredAuthorization();if(!selected||selected==='expansion')await observationExpansion();if(!selected||selected==='catalog')await catalogControls();if(!selected||selected==='decisions')await decisionProvenance();console.log('Dashboard navigation, save, poll, authorization, catalog controls and expansion regressions pass.');})().catch(error=>{console.error(error);process.exitCode=1;});
+async function telemetryCoverage(){
+  const ui=boot('');await flush();await flush();
+  const scope='11111111-1111-4111-8111-111111111111';
+  ui.snapshot().collector_registration={status:'declared',collectors:['session_start','statusline'],declared_at:'2026-10-19T12:00:00Z'};
+  ui.snapshot().collector_health={hooks:{configured:true,receipt_status:'recent',last_received_at:'2026-10-19T12:00:00Z',transports:{stdin:1,http:0},transport_unreported_records:0},statusline:{configured:true,receipt_status:'stale',last_received_at:'2026-10-19T11:00:00Z',transports:{stdin:1,http:0},transport_unreported_records:0}};
+  ui.snapshot().otel_receiver={enabled:false};
+  ui.snapshot().totals.statusline={sessions:1,receipts:4};
+  ui.snapshot().session_observations=[{session_id:scope,configuration:{model:'sonnet',observed_at:'2026-10-19T12:00:00Z'},recommendation:{model:'haiku',observed_at:'2026-10-19T12:00:01Z'},execution_request:{model:'requested-local',observed_at:'2026-10-19T12:00:02Z'},actual_execution:null,statusline:{latest_context_usage:{input_tokens:1200,output_tokens:50},session_cost_estimate_usd:.25,session_duration_ms:2000,session_api_duration_ms:1000,snapshot_receipts:4,snapshot_changes:2,observed_at:'2026-10-19T12:00:00Z',changed_at:'2026-10-19T11:59:00Z'}}];
+  ui.snapshot().events=[{source:'claude_statusline',session_id:scope,request_id:scope,model:'sonnet',model_source:'statusline_configuration',latest_context_usage:{input_tokens:1200,output_tokens:50},session_cost_estimate_usd:.25,snapshot_receipts:4,snapshot_changes:2}];
+  ui.poll();await flush();
+  assert.match(ui.nodes['hooks-health'].textContent,/Declared configured; Recent receipt/);
+  assert.match(ui.nodes['statusline-health'].textContent,/Declared configured; Stale receipt/);
+  assert.equal(ui.nodes['otel-receiver'].textContent,'Receiver disabled');
+  assert.match(ui.nodes['otel-diagnostics'].textContent,/stdin collectors have independent receipt health/);
+  assert.match(ui.nodes['collector-registration'].textContent,/Effectiveness remains unverified/);
+  assert.match(ui.nodes['statusline-summary'].textContent,/not summed usage/);
+  const details=ui.nodes['session-observations'].children[0].children[1].children.map(node=>node.textContent);
+  assert.ok(details.some(value=>value.startsWith('sonnet; observed')));
+  assert.ok(details.some(value=>value.startsWith('haiku; observed')));
+  assert.ok(details.includes('Actual execution model'));assert.ok(details.includes('Unobserved'));
+  assert.ok(details.includes('1,200 / 50; not cumulative usage'));
+  assert.ok(details.includes('$0.250000; not measured billed cost'));
+  assert.equal(ui.nodes.events.children[0].children[0].children[3].textContent,'Configuration snapshot');
+  assert.equal(ui.nodes.executions.textContent,'0','statusline snapshot became a completed execution');
+  ui.nodes['local-model'].value='keep-my-edit';ui.nodes['config-form'].listeners.input();ui.poll();await flush();
+  assert.equal(ui.nodes['local-model'].value,'keep-my-edit');
+  ui.snapshot().collector_registration={status:'unverified',collectors:[]};ui.snapshot().collector_health={};ui.poll();await flush();
+  assert.match(ui.nodes['hooks-health'].textContent,/Configuration unverified; No retained receipt/);
+}
+(async()=>{const selected=process.argv[2];if(!selected||selected==='telemetry')await telemetryCoverage();if(!selected||selected==='restore')await restoredTabState();if(!selected||selected==='anchors')await anchors();if(!selected||selected==='save')await delayedSave();if(!selected||selected==='poll')await stalePoll();if(!selected||selected==='auth')await expiredAuthorization();if(!selected||selected==='expansion')await observationExpansion();if(!selected||selected==='catalog')await catalogControls();if(!selected||selected==='decisions')await decisionProvenance();console.log('Dashboard navigation, save, poll, authorization, catalog controls and expansion regressions pass.');})().catch(error=>{console.error(error);process.exitCode=1;});

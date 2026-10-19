@@ -267,7 +267,8 @@
       "model_source": "hook_metadata",
       "execution_status": "session_observed",
       "contract_validation": "documented_hook_schema",
-      "observed_at": "2026-10-15T14:30:00+00:00"
+      "observed_at": "2026-10-15T14:30:00+00:00",
+      "collection_transport": "stdin"
     },
     {
       "source": "claude_hook",
@@ -280,7 +281,31 @@
       "model_source": "hook_metadata",
       "execution_status": "stop_observed",
       "contract_validation": "documented_hook_schema",
-      "observed_at": "2026-10-15T14:31:00+00:00"
+      "observed_at": "2026-10-15T14:31:00+00:00",
+      "collection_transport": "stdin"
+    },
+    {
+      "source": "claude_statusline",
+      "session_id": "22222222-2222-4222-8222-222222222222",
+      "session_source": "claude_thread",
+      "request_id": "ecd91c68-54b4-5bd7-962e-0c408478a60e",
+      "stage": 2,
+      "adapter": "native",
+      "mode": "statusline_snapshot",
+      "execution_status": "session_snapshot_observed",
+      "model_source": "statusline_configuration",
+      "contract_validation": "documented_statusline_schema",
+      "model": "haiku",
+      "effort": "medium",
+      "collection_transport": "stdin",
+      "latest_context_usage": {
+        "input_tokens": 1800,
+        "output_tokens": 90
+      },
+      "session_cost_estimate_usd": 0.042,
+      "session_duration_ms": 180000,
+      "session_api_duration_ms": 24000,
+      "observed_at": "2026-10-15T14:34:00+00:00"
     }
   ],
   "model_catalog": {
@@ -330,6 +355,14 @@
         ],
         "policy_supported": true
       }
+    ]
+  },
+  "collector_registration": {
+    "schema_version": 1,
+    "declared_at": "2026-10-15T14:00:00+00:00",
+    "collectors": [
+      "session_start",
+      "statusline"
     ]
   }
 }

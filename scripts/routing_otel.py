@@ -55,7 +55,8 @@ def tally(producer, kind, label):
     counts[label] = counts.get(label, 0) + 1
 
 
-def metadata(record, diagnostics=None, producer=None, producer_version=None, event_id=None):
+def metadata(record, diagnostics=None, producer=None, producer_version=None, event_id=None,
+             collection_transport=None):
     def ignore(reason):
         if diagnostics is not None:
             diagnostics[reason] = diagnostics.get(reason, 0) + 1
@@ -125,6 +126,8 @@ def metadata(record, diagnostics=None, producer=None, producer_version=None, eve
              'execution_status': status, 'model_source': 'hook_metadata',
              'contract_validation': 'documented_hook_schema',
              'evaluator_usage': {'input_tokens': 0, 'output_tokens': 0}, 'evaluator_attempts': 0}
+    if collection_transport is not None:
+        event['collection_transport'] = collection_transport
     if model is not None:
         event['model'] = model
     effort = record.get('effort')
@@ -164,7 +167,7 @@ def decode(raw):
     return [value]
 
 
-def ingest(raw, ledger, diagnostics=None, producer=None):
+def ingest(raw, ledger, diagnostics=None, producer=None, collection_transport=None):
     accepted = ignored = rejected = 0
     events = []
     for item in decode(raw):
@@ -173,9 +176,10 @@ def ingest(raw, ledger, diagnostics=None, producer=None):
             if isinstance(item, dict) and 'hook' in item:
                 if set(item) - {'hook', 'producer_version', 'event_id'}:
                     raise ValueError('invalid_hook_envelope')
-                event = metadata(item['hook'], diagnostics, producer, item.get('producer_version'), item.get('event_id'))
+                event = metadata(item['hook'], diagnostics, producer, item.get('producer_version'), item.get('event_id'),
+                                 collection_transport)
             else:
-                event = metadata(item, diagnostics, producer)
+                event = metadata(item, diagnostics, producer, collection_transport=collection_transport)
         except (ValueError, TypeError, OverflowError, OSError):
             rejected += 1
             continue

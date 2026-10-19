@@ -7,6 +7,7 @@ jobs:
     timeout-minutes: 15
     env:
       ROUTING_REQUIRE_HTTP_TESTS: '1'
+      ROUTING_REQUIRE_SHELL_TESTS: '1'
     strategy:
       fail-fast: false
       matrix:

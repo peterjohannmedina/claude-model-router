@@ -7,13 +7,20 @@ Copy this prompt into the Claude Code session that should install the package:
 > Read README.md and the current skill before acting. Inspect dependencies and
 > report the intended paths. Install the complete versioned package, then run
 > doctor/status. Preserve my settings, instructions, credentials, history and
-> manually pinned model. Do not activate paid providers, telemetry hooks, login
+> manually pinned model. Do not activate paid providers, telemetry hooks or
+> status-line collection, login
 > startup, or model switching merely because I requested installation. Offer
 > explicit dashboard startup and shortcut choices; use `open` to reopen a running
 > dashboard. Confirm native model eligibility through my supported Claude Code
 > `/model` picker and import only the models/efforts I confirm. API discovery
 > cannot prove my subscription entitlement. Do not change shell policy or ACLs to
 > make setup pass. If blocked, report the actual failed check and stop that step.
+
+Ongoing status-line telemetry requires a separate reviewed integration. Preserve
+the existing display command and all options; read
+[the metadata scope and rollback](docs/continuous-telemetry.md) first. Context
+counters are snapshots, cost is a client estimate, and recent receipt does not
+prove model execution or task completion.
 
 Installation changes files under the selected Claude config root. Start a new
 Claude Code session to discover updated skills and agent profiles. Dashboard

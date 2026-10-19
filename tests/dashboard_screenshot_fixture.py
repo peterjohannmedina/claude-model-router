@@ -33,7 +33,9 @@ def load_fixture():
     sessions = {'11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'}
     for index, event in enumerate(fixture['events'], 1):
         state.sanitize(event)
-        if event['session_id'] not in sessions or event['request_id'] != f'aaaaaaaa-aaaa-4aaa-8aaa-{int("aaaaaaaaaaa0",16)+index:012x}':
+        expected_id = (state.statusline_request_id(event['session_id']) if event['source'] == 'claude_statusline'
+                       else f'aaaaaaaa-aaaa-4aaa-8aaa-{int("aaaaaaaaaaa0",16)+index:012x}')
+        if event['session_id'] not in sessions or event['request_id'] != expected_id:
             raise ValueError('demo_identifiers_required')
         if not state.timestamp(event['observed_at']): raise ValueError('fixture_timestamp_required')
         if event.get('selected_candidate_id'):
@@ -54,11 +56,16 @@ class ScreenshotStore(dashboard.Store):
     def snapshot(self, session=None):
         result = super().snapshot(session)
         result['observed_at'] = self.fixture_clock
+        result['collector_health'] = dashboard.collector_health(result['events'], result['collector_registration'],
+            state.dt.datetime.fromisoformat(self.fixture_clock))
         if self.catalog_fixture: result['model_catalog'] = self.catalog_fixture
         return result
 
 
 def seed_fixture(root, fixture):
+    root.mkdir(parents=True, exist_ok=True)
+    if fixture.get('collector_registration'):
+        (root / 'telemetry-registration.json').write_text(json.dumps(fixture['collector_registration']), encoding='utf-8')
     store = ScreenshotStore(root, fixture)
     _, version = store.config()
     store.save(fixture['config'], version)
@@ -71,6 +78,7 @@ def seed_fixture(root, fixture):
         with ledger.connect() as connection:
             row = json.loads(connection.execute('SELECT body FROM events WHERE id=?', (identity,)).fetchone()[0])
             row['observed_at'] = row['first_observed_at'] = event['observed_at']
+            if event['source'] == 'claude_statusline': row['changed_at'] = event['observed_at']
             # Keep fixture rows retained on future CI runs while their displayed
             # demo dates/ordering remain fixed. No production records are used.
             connection.execute('UPDATE events SET updated=?,body=? WHERE id=?',
