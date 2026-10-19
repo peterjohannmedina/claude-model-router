@@ -57,6 +57,11 @@ receipts update last-seen time without creating more observations or adding
 usage/cost. Hook lifecycle rows and router/exec usage remain separate. Retention
 and recording-disabled settings apply to this collector too.
 
+Collection is best effort: the ledger has a bounded 250 ms lock wait. A busy
+writer or failed/cancelled callback can drop a receipt without advancing
+last-seen time. Successful concurrent writes serialize their counters; there is
+no queue, exact receipt-count guarantee, or automatic inference retry.
+
 By default the collector prints nothing. **It is not a transparent replacement
 for an existing status-line display.** Optional `--forward-stdin` passes the
 original bounded JSON object to stdout for an existing trusted display command;
