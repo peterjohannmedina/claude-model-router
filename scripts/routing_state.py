@@ -50,6 +50,15 @@ def statusline_request_id(session):
     return str(uuid.uuid5(uuid.UUID(identifier(session, allow_unassigned=False)), 'statusline_snapshot'))
 
 
+def statusline_model(value):
+    if value is None:
+        return None
+    from routing_catalog import model_id
+    if not model_id(value) or label(value) is None or re.match(r'^[A-Za-z]:', value):
+        raise ValueError('invalid_statusline_model')
+    return value
+
+
 def probability(value):
     return value if type(value) in (int, float) and 0 <= value <= 1 and math.isfinite(value) else None
 
@@ -161,9 +170,7 @@ def sanitize(raw):
                     or result['request_id'] != statusline_request_id(result['session_id'])
                     or result['stage'] != 2 or result['adapter'] != 'native'):
                 raise ValueError('invalid_statusline_identity')
-            from routing_catalog import model_id
-            if raw.get('model') is not None and (not model_id(raw['model']) or result['model'] is None):
-                raise ValueError('invalid_statusline_model')
+            result['model'] = statusline_model(raw.get('model'))
             if raw.get('effort') not in (None, 'low', 'medium', 'high', 'xhigh', 'max'):
                 raise ValueError('invalid_statusline_effort')
             context = raw.get('latest_context_usage')

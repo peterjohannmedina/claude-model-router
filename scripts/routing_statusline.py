@@ -5,8 +5,8 @@ session or billed usage. Session cost is a client-side estimate. Nothing here
 opens a transcript, probes a provider, or changes Claude settings.
 """
 import json
+import math
 
-import routing_catalog as catalog
 import routing_state as state
 
 MAX_BYTES = 1048576
@@ -25,7 +25,13 @@ def decode(raw):
         return result
     def invalid(_):
         raise ValueError('invalid_number')
-    value = json.loads(raw.decode('utf-8-sig'), object_pairs_hook=unique, parse_constant=invalid)
+    def finite_float(text):
+        value = float(text)
+        if not math.isfinite(value):
+            raise ValueError('invalid_number')
+        return value
+    value = json.loads(raw.decode('utf-8-sig'), object_pairs_hook=unique,
+                       parse_constant=invalid, parse_float=finite_float)
     if not isinstance(value, dict):
         raise ValueError('invalid_statusline_payload')
     return value
@@ -36,9 +42,7 @@ def metadata(record, collection_transport=None):
             or not isinstance(record.get('model'), dict)):
         raise ValueError('invalid_statusline_payload')
     session = state.identifier(record.get('session_id'), allow_unassigned=False)
-    model = record['model'].get('id')
-    if model is not None and (not catalog.model_id(model) or state.label(model) is None):
-        raise ValueError('invalid_statusline_model')
+    model = state.statusline_model(record['model'].get('id'))
     event = {'source': 'claude_statusline', 'session_id': session,
              'request_id': state.statusline_request_id(session), 'session_source': 'claude_thread',
              'stage': 2, 'adapter': 'native', 'mode': 'statusline_snapshot',
@@ -54,7 +58,8 @@ def metadata(record, collection_transport=None):
     event['effort'] = level
     cost = record.get('cost')
     context = record.get('context_window')
-    if cost is not None and not isinstance(cost, dict) or context is not None and not isinstance(context, dict):
+    if ((cost is not None and not isinstance(cost, dict))
+            or (context is not None and not isinstance(context, dict))):
         raise ValueError('invalid_statusline_snapshot')
     for source, target in (('total_duration_ms', 'session_duration_ms'),
                            ('total_api_duration_ms', 'session_api_duration_ms'),

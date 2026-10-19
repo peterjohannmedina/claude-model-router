@@ -1,5 +1,4 @@
 """Offline status-line metadata snapshots; no Claude, credentials, or network."""
-import copy
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr
 import datetime as dt
@@ -179,7 +178,7 @@ class StatuslineTests(unittest.TestCase):
             with self.subTest(version=version),self.assertRaises(ValueError):statusline.metadata(payload(version=version))
 
     def test_private_paths_or_secrets_cannot_be_models(self):
-        for model in ('C:/Users/Alice/private','/private/path','../project','C:\\private\\path','https://private.example/id',PRIVATE):
+        for model in ('C:/Users/Alice/private','C:private','/private/path','../project','C:\\private\\path','https://private.example/id',PRIVATE):
             with self.subTest(model=model),self.assertRaises(ValueError):
                 statusline.metadata(payload(model={'id':model}))
         self.assertIsNone(statusline.metadata(payload(model={'id':None}))['model'])
@@ -207,7 +206,7 @@ class StatuslineTests(unittest.TestCase):
         with self.assertRaises(ValueError):state.sanitize({**event,'execution_status':'completed'})
 
     def test_json_byte_shape_duplicate_and_number_limits(self):
-        for raw in (b'[]',b'{}',b'{"session_id":"a","session_id":"b"}',b'{"x":NaN}',b'\xff',b'X'*(statusline.MAX_BYTES+1)):
+        for raw in (b'[]',b'{}',b'{"session_id":"a","session_id":"b"}',b'{"x":NaN}',b'{"x":1e999}',b'\xff',b'X'*(statusline.MAX_BYTES+1)):
             with self.subTest(raw=raw[:30]),self.assertRaises((ValueError,UnicodeError)):
                 statusline.metadata(statusline.decode(raw))
         for changes in ({'cost':[]},{'context_window':[]},{'effort':'high'},{'effort':{'level':[]}},
