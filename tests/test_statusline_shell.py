@@ -35,7 +35,7 @@ def quoted(path):
 
 
 def inert_environment():
-    # No credentials, BASH_ENV, startup files, or Claude variables reach fixtures.
+    # No credentials, BASH_ENV, startup files, or inherited Claude variables.
     names = ('PATH', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC',
              'PATHEXT', 'TEMP', 'TMP', 'LANG')
     result = {key: os.environ[key] for key in names if key in os.environ}
@@ -44,6 +44,7 @@ def inert_environment():
 
 
 class StatuslineShell(unittest.TestCase):
+    maxDiff = None  # Preserve synthetic child startup diagnostics on CI failure.
     @classmethod
     def setUpClass(cls):
         cls.bash = bash_executable()
@@ -106,8 +107,13 @@ class StatuslineShell(unittest.TestCase):
         command = (quoted(sys.executable) + ' -B ' + quoted(ROOT / 'scripts/collect_claude_statusline.py')
             + ' --state-dir ' + quoted(self.state) + ' --forward-stdin | '
             + quoted(self.bash) + ' --noprofile --norc ' + quoted(self.display))
+        # CLI defaults are constructed before explicit arguments are parsed.
+        # A sterile Windows environment intentionally has no USERPROFILE; give
+        # the supported default resolver the same temporary root explicitly,
+        # rather than inheriting or consulting any real Claude/home directory.
+        environment = {**self.env, 'CLAUDE_ROUTER_STATE_DIR': str(self.state)}
         return subprocess.run([str(self.bash), '--noprofile', '--norc', '-c', command],
-            input=raw, capture_output=True, timeout=20, cwd=self.root, env=self.env)
+            input=raw, capture_output=True, timeout=20, cwd=self.root, env=environment)
 
     def test_quoted_paths_and_exact_binary_stdin_preserve_display(self):
         raw = self.payload()
