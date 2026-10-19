@@ -52,6 +52,10 @@ path, repository identity or credential is retained. It never opens a path from
 stdin and makes no network requests. Unknown fields are dropped. Invalid known
 fields fail safely; missing optional fields remain unknown.
 
+The full bounded input is parsed in memory before the allowlist is applied. It
+can include private paths and session titles, even though these are never
+retained or opened. Review that new persistent input access before activation.
+
 The ledger keeps a single latest snapshot per native session. Identical valid
 receipts update last-seen time without creating more observations or adding
 usage/cost. Hook lifecycle rows and router/exec usage remain separate. Retention
@@ -82,6 +86,33 @@ user-owned script using the same stdin object, or carefully compose the explicit
 forwarding option with its unchanged display command in the same supported
 shell. Do not replace a working display with a silent collector.
 
+Use event-driven collection first: leave `refreshInterval` absent. Review the
+existing command as code before composing it; a status-line display may also
+write caches or routing-policy state. A timer reruns the **entire command**,
+including those existing side effects, rather than just the metadata collector.
+Adding a timer therefore needs a separate scope decision.
+
+On Windows, the documented runner uses Git Bash when available and PowerShell
+otherwise. Do not copy an unquoted `C:\\Users\\...` command into a Bash pipeline:
+backslashes can be interpreted as escapes. For a verified Bash runner, use
+quoted paths with forward slashes. A command with one existing executable and
+script argument can be composed like this (the actual shell still needs to be
+verified):
+
+```sh
+"C:/absolute/python.exe" -B "C:/absolute/collect_claude_statusline.py" --state-dir "C:/absolute/routing" --forward-stdin | "C:/absolute/bash.exe" "C:/absolute/existing-statusline.sh"
+```
+
+This preserves the existing script, arguments and inherited environment; it
+does not claim literal byte identity with a wrongly escaped command string.
+Do not use this Bash syntax as a PowerShell command. Validate quoting, exact
+stdin forwarding, display output and downstream exit status with inert
+substitutes and synthetic input first. Do not execute an unreviewed existing
+display just to check composition. A missing collector/module or interpreter
+startup failure can prevent forwarding, so verify the complete installed
+package before changing settings. No-timer installation/activation remains a
+separate reviewed local action from code or PR preparation.
+
 For a configuration **without an existing status line**, a command entry can
 point to the installed collector (replace absolute paths and use the quoting
 required by Claude's actual command shell):
@@ -95,7 +126,7 @@ required by Claude's actual command shell):
 }
 ```
 
-That example intentionally renders no display. Timer refresh is a separate
+That example intentionally renders no display and adds no timer. Timer refresh is a separate
 choice: after verifying support, `"refreshInterval": 10` gives a ten-second
 metadata receipt cadence while the status line runs. Timer receipts show that
 the script ran, not that a model request or useful work occurred. Claude may
