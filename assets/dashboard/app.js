@@ -172,6 +172,45 @@ function renderCatalog(data){
 function addDetail(list, label, value) {
   const dt=document.createElement('dt'), dd=document.createElement('dd'); dt.textContent=label; dd.textContent=value ?? 'Unknown'; list.append(dt,dd);
 }
+function renderCollectorHealth(data) {
+  const registration=data.collector_registration;
+  text('collector-registration',registration?.status==='declared'?
+    'Operator declaration: '+registration.collectors.join(', ')+'; declared '+(registration.declared_at||'time unreported')+'. Effectiveness remains unverified; Claude settings are not inspected.':
+    'Collector registration is unverified. No Claude settings are inspected. Receipt evidence is shown independently.');
+  for(const name of ['hooks','statusline']){
+    const health=data.collector_health?.[name];
+    const configured=health?.configured===true?'Declared configured':health?.configured===false?'Not declared configured':'Configuration unverified';
+    const receipt={recent:'Recent receipt',stale:'Stale receipt',none:'No retained receipt',timestamp_unverified:'Receipt timestamp unverified'}[health?.receipt_status]||'No retained receipt';
+    let value=configured+'; '+receipt+'. Last retained receipt: '+(health?.last_received_at||'Unobserved')+'.';
+    if(health)value+=' Transport records: stdin '+number(health.transports?.stdin||0)+', HTTP '+number(health.transports?.http||0)+', unreported '+number(health.transport_unreported_records||0)+'.';
+    text(name+'-health',value);
+  }
+  const statusline=data.totals.statusline;
+  text('statusline-summary',statusline?number(statusline.sessions)+' sessions with retained statusline snapshots; '+number(statusline.receipts)+' receipts. Context tokens are latest-context values, not summed usage. Client cumulative session cost estimates remain separate from other feeds.':'No retained statusline snapshots. Context usage and client session cost estimates are unobserved.');
+}
+function renderSessionObservations(sessions=[]) {
+  const holder=byId('session-observations'),children=[];
+  const modelText=evidence=>evidence?.model?evidence.model+(evidence.effort?' / '+evidence.effort:'')+'; observed '+(evidence.observed_at||'time unavailable'):'Unobserved';
+  for(const session of sessions){
+    const article=document.createElement('article'),heading=document.createElement('h3'),list=document.createElement('dl');
+    heading.textContent=session.session_id;article.className='session-evidence';
+    addDetail(list,'Observed configuration model',modelText(session.configuration));
+    addDetail(list,'Router-selected model',modelText(session.recommendation));
+    addDetail(list,'Execution request model',modelText(session.execution_request));
+    addDetail(list,'Actual execution model',modelText(session.actual_execution));
+    const snapshot=session.statusline;
+    if(snapshot){
+      addDetail(list,'Latest context input / output tokens',number(snapshot.latest_context_usage?.input_tokens)+' / '+number(snapshot.latest_context_usage?.output_tokens)+'; not cumulative usage');
+      addDetail(list,'Client cumulative session cost estimate',money(snapshot.session_cost_estimate_usd)+'; not measured billed cost');
+      addDetail(list,'Client cumulative session / API duration (ms)',number(snapshot.session_duration_ms)+' / '+number(snapshot.session_api_duration_ms));
+      addDetail(list,'Snapshot receipts / changes',number(snapshot.snapshot_receipts)+' / '+number(snapshot.snapshot_changes));
+      addDetail(list,'Last snapshot receipt / content change',(snapshot.observed_at||'Unobserved')+' / '+(snapshot.changed_at||'Unobserved'));
+    }else addDetail(list,'Statusline snapshot','Unobserved');
+    article.append(heading,list);children.push(article);
+  }
+  if(!children.length){const empty=document.createElement('p');empty.className='small muted';empty.textContent='No retained session model observations in this scope.';children.push(empty);}
+  holder.replaceChildren(...children);
+}
 function renderEvents(events) {
   const holder = byId('events'), current = Array.from(holder.children);
   const existing = new Map(current.filter(row=>row.routingObservationKey).map(row=>[row.routingObservationKey,row]));
@@ -197,19 +236,24 @@ function renderEvents(events) {
       if(row.open)expandedObservations.add(key);else expandedObservations.delete(key);
       try{sessionStorage.setItem('routing-expanded',JSON.stringify(Array.from(expandedObservations).slice(-100)));}catch(_){}
     });
-    const source=event.source==='claude_hook'?'Claude hook':event.source==='claude_otel'?'Claude OTel (unverified)':event.source==='router'?'Router':'Execution harness (caller-reported)';
-    const status=event.source==='claude_hook'?({hook_session:'Session observed',hook_stop:'Stop observed',hook_compact:'Compaction observed',hook_end:'Session end observed',hook_subagent_start:'Subagent started',hook_subagent_stop:'Subagent stop observed',hook_model_switch:'Model switch observed'}[event.mode] || 'Hook observed'):event.mode==='otel_session'?'Session settings observed':event.mode==='otel_response'?'Model response observed':event.execution_status==='completed'?'Executed · complete':event.execution_status==='started'?'In progress':event.execution_status==='failed'||event.error?'Failed / stopped':'Recommendation';
+    const source=event.source==='claude_statusline'?'Claude statusline':event.source==='claude_hook'?'Claude hook':event.source==='claude_otel'?'Claude OTel (unverified)':event.source==='router'?'Router':'Execution harness (caller-reported)';
+    const status=event.source==='claude_statusline'?'Configuration snapshot':event.source==='claude_hook'?({hook_session:'Session observed',hook_stop:'Stop observed',hook_compact:'Compaction observed',hook_end:'Session end observed',hook_subagent_start:'Subagent started',hook_subagent_stop:'Subagent stop observed',hook_model_switch:'Model switch observed'}[event.mode] || 'Hook observed'):event.mode==='otel_session'?'Session settings observed':event.mode==='otel_response'?'Model response observed':event.execution_status==='completed'?'Executed · complete':event.execution_status==='started'?'In progress':event.execution_status==='failed'||event.error?'Failed / stopped':'Recommendation';
     const values=[time(event.observed_at), (event.model || 'Model unobserved') + (event.effort ? ' · '+event.effort : ''), source, status];
     values.forEach((value,i)=>{ const span=document.createElement('span'); span.textContent=value; if(i===2)span.className='event-source'; if(i===3)span.className='event-status'; summary.append(span); });
     const list=document.createElement('dl');
-    addDetail(list,'Session',event.session_id); addDetail(list,['claude_otel','claude_hook'].includes(event.source)?'Observation (derived ID)':'Request',event.request_id);
+    addDetail(list,'Session',event.session_id); addDetail(list,['claude_otel','claude_hook','claude_statusline'].includes(event.source)?'Observation (derived ID)':'Request',event.request_id);
     addDetail(list,'Session evidence',event.session_source || (event.session_id==='unassigned'?'Unassigned':'Caller-assigned UUID'));
     addDetail(list,'Source / mode',event.source+' / '+(event.mode || 'unknown'));
-    if(['claude_otel','claude_hook'].includes(event.source)){
+    if(['claude_otel','claude_hook','claude_statusline'].includes(event.source)){
       addDetail(list,'Producer version',event.producer_version);
-      addDetail(list,'Contract evidence',event.contract_validation==='documented_hook_schema'?'Documented hook schema; producer version is an optional caller annotation':event.contract_validation==='reviewed_version'?'Source-reviewed version':event.contract_validation==='reviewed_series_schema'?'Reviewed series schema match; exact build semantics unverified':'Not recorded');
+      addDetail(list,'Contract evidence',event.contract_validation==='documented_statusline_schema'?'Documented statusline schema; configuration and latest-context evidence only':event.contract_validation==='documented_hook_schema'?'Documented hook schema; producer version is an optional caller annotation':event.contract_validation==='reviewed_version'?'Source-reviewed version':event.contract_validation==='reviewed_series_schema'?'Reviewed series schema match; exact build semantics unverified':'Not recorded');
     }
-    addDetail(list,'Model evidence',event.model_source); addDetail(list,'Execution',event.execution_status);
+    addDetail(list,'Model evidence',event.model_source); addDetail(list,'Collection transport',event.collection_transport||'Unreported');
+    if(event.source==='claude_statusline'){
+      addDetail(list,'Latest context input / output (not cumulative)',number(event.latest_context_usage?.input_tokens)+' / '+number(event.latest_context_usage?.output_tokens));
+      addDetail(list,'Client cumulative session cost estimate',money(event.session_cost_estimate_usd)+'; not billed cost');
+      addDetail(list,'Snapshot receipts / changes',number(event.snapshot_receipts)+' / '+number(event.snapshot_changes));
+    } addDetail(list,'Execution',event.execution_status);
     addDetail(list,'Execution request model / effort',(event.execution_model || 'Unobserved')+' / '+(event.execution_effort || 'Unobserved'));
     addDetail(list,'Collector stream',event.stream_status || 'Not a collected stream');
     addDetail(list,'Override model / effort',(event.override_model || 'Automatic')+' / '+(event.override_effort || 'Automatic'));
@@ -266,7 +310,7 @@ function render(data, formFresh = true) {
   text('otel-receiver',receiver?.enabled?'Receiver listening · '+(receiver.accepted_records?'metadata received':'no metadata received'):'Receiver disabled');
   text('otel-summary',hooks.sessions+' sessions with retained hook metadata; '+hooks.observations+' lifecycle observations; '+hooks.stops+' Stop observations. Stop is not verified turn completion. Hook token usage and billed cost are unavailable.');
   const count=value=>number(Number.isSafeInteger(value)&&value>=0?value:0);
-  let diagnostic=receiver?.enabled?'Optional receiver enabled. Only explicitly configured hook producers can send observations.':'Receiver disabled. No automatic session discovery or feed is active.';
+  let diagnostic=receiver?.enabled?'Optional receiver enabled. Only explicitly configured hook producers can send observations.':'Optional HTTP receiver disabled. Direct stdin collectors have independent receipt health above.';
   if(receiver?.last_received_at)diagnostic+=' Last validated batch: '+time(receiver.last_received_at)+'. History does not prove a current feed.';
   if(receiver)diagnostic+=' Requests / unauthorized / invalid: '+count(receiver.requests)+' / '+count(receiver.unauthorized_requests)+' / '+count(receiver.invalid_batches)+'. Accepted / ignored / rejected records: '+count(receiver.accepted_records)+' / '+count(receiver.ignored_records)+' / '+count(receiver.rejected_records)+'.';
   if(receiver?.unsupported_transport_records)diagnostic+=' OTel payloads are unsupported; use the documented hook collector.';
@@ -294,7 +338,7 @@ function render(data, formFresh = true) {
     text(name+'-observed',observed?'Last observation: '+outcome+' · '+time(observed.observed_at)+' (historical)':'Last observation: unobserved');
   }
   if(!dirty&&!saving&&formFresh)fill(data.config,data.config_version);
-  renderCatalog(data);restoreDraft();renderEvents(data.events);renderChart(data.daily);
+  renderCatalog(data);restoreDraft();renderEvents(data.events);renderChart(data.daily);renderCollectorHealth(data);renderSessionObservations(data.session_observations);
   text('updated','Refreshed '+time(data.observed_at)+' · local observation time');text('connection','Dashboard connected · 2s');
 }
 async function refresh(){

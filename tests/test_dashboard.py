@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 import routing_dashboard as dashboard
 import routing_runtime as runtime
 import routing_state as state
+import routing_statusline as statusline
 
 
 def event(**kwargs):
@@ -159,6 +160,100 @@ class LocalState(unittest.TestCase):
             self.assertEqual(state.state_root(), self.root)
         with patch.dict(os.environ, {'CLAUDE_CONFIG_DIR': str(self.root)}, clear=True):
             self.assertEqual(state.state_root(), self.root / 'routing')
+
+    def test_collector_declarations_are_allowlisted_and_not_settings_attestation(self):
+        path = self.root / 'telemetry-registration.json'
+        self.assertEqual(dashboard.collector_registration(self.root)['status'], 'unverified')
+        payload = {'schema_version': 1, 'declared_at': '2026-10-19T12:00:00+00:00',
+                   'collectors': ['session_start', 'statusline']}
+        path.write_text(json.dumps(payload), encoding='utf-8')
+        result = dashboard.collector_registration(self.root)
+        self.assertEqual(result['status'], 'declared')
+        self.assertEqual(result['effectiveness'], 'unverified')
+        self.assertEqual(result['collectors'], ['session_start', 'statusline'])
+        for invalid in ({**payload, 'command': 'private command'}, {**payload, 'collectors': ['private-collector']},
+                        {**payload, 'collectors': ['statusline', 'statusline']},
+                        {**payload, 'declared_at': 'invalid'}, {**payload, 'schema_version': True}):
+            path.write_text(json.dumps(invalid), encoding='utf-8')
+            result = dashboard.collector_registration(self.root)
+            self.assertEqual(result['status'], 'unverified')
+            self.assertNotIn('private', json.dumps(result))
+        path.write_text('x' * 4097, encoding='utf-8')
+        self.assertEqual(dashboard.collector_registration(self.root)['status'], 'unverified')
+
+    def test_receipt_health_is_scoped_and_separate_from_declarations_and_http(self):
+        now = state.dt.datetime(2026, 10, 19, 12, tzinfo=state.dt.timezone.utc)
+        declared = {'status': 'declared', 'collectors': ['session_start', 'statusline']}
+        rows = [event(source='claude_hook', session_id='11111111-1111-4111-8111-111111111111',
+                      observed_at='2026-10-19T11:59:59+00:00', collection_transport='stdin'),
+                event(source='claude_statusline', observed_at='2026-10-19T11:54:59+00:00')]
+        health = dashboard.collector_health(rows, declared, now)
+        self.assertTrue(health['hooks']['configured'])
+        self.assertEqual(health['hooks']['receipt_status'], 'recent')
+        self.assertEqual(health['hooks']['transports']['stdin'], 1)
+        self.assertEqual(health['statusline']['receipt_status'], 'stale')
+        self.assertEqual(health['statusline']['transport_unreported_records'], 1)
+        self.assertEqual(health['statusline']['age_seconds'], 301)
+        self.assertEqual(dashboard.collector_health([], declared, now)['hooks']['receipt_status'], 'none')
+        unregistered = dashboard.collector_health(rows, {'status': 'unverified', 'collectors': []}, now)
+        self.assertIsNone(unregistered['hooks']['configured'])
+        self.assertEqual(unregistered['hooks']['receipt_status'], 'recent')
+        future = [{**rows[1], 'observed_at': '2026-10-19T12:00:01+00:00'}]
+        self.assertEqual(dashboard.collector_health(future, declared, now)['statusline']['receipt_status'],
+                         'timestamp_unverified')
+
+    def test_session_models_keep_configuration_selection_and_execution_requests_distinct(self):
+        session = str(uuid.uuid4())
+        rows = [event(source='claude_hook', session_id=session, mode='hook_session', model='sonnet',
+                      observed_at='2026-10-19T11:00:00+00:00'),
+                event(source='claude_statusline', session_id=session, model='haiku', model_source='statusline_configuration',
+                      observed_at='2026-10-19T11:01:00+00:00', latest_context_usage={'input_tokens': 1200, 'output_tokens': 50},
+                      session_cost_estimate_usd=0.25, snapshot_receipts=3, snapshot_changes=1),
+                event(session_id=session, model='opus', execution_model='requested-local-model', execution_status='completed',
+                      observed_at='2026-10-19T11:02:00+00:00')]
+        result = dashboard.session_observations(rows)[0]
+        self.assertEqual(result['configuration']['model'], 'haiku')
+        self.assertEqual(result['recommendation']['model'], 'opus')
+        self.assertEqual(result['execution_request']['model'], 'requested-local-model')
+        self.assertIsNone(result['actual_execution'])
+        self.assertEqual(result['statusline']['latest_context_usage']['input_tokens'], 1200)
+        self.assertEqual(result['statusline']['session_cost_estimate_usd'], 0.25)
+        self.assertEqual(result['statusline']['snapshot_receipts'], 3)
+
+    def test_statusline_heartbeat_updates_scoped_health_without_summing_context_usage(self):
+        session, other = str(uuid.uuid4()), str(uuid.uuid4())
+        record = {'session_id': session, 'model': {'id': 'sonnet'},
+                  'context_window': {'total_input_tokens': 1200, 'total_output_tokens': 50},
+                  'cost': {'total_cost_usd': 0.25, 'total_duration_ms': 3000}}
+        statusline.ingest(json.dumps(record).encode(), self.ledger, collection_transport='stdin')
+        statusline.ingest(json.dumps({**record, 'session_id': other, 'model': {'id': 'haiku'}}).encode(), self.ledger)
+        stale_at = (state.dt.datetime.now(state.dt.timezone.utc) - state.dt.timedelta(minutes=10)).isoformat()
+        with self.ledger.connect() as connection:
+            for key, body in connection.execute('SELECT id,body FROM events').fetchall():
+                row = json.loads(body)
+                if row['session_id'] == session:
+                    row['observed_at'] = stale_at
+                    connection.execute('UPDATE events SET body=? WHERE id=?', (json.dumps(row), key))
+        (self.root / 'telemetry-registration.json').write_text(json.dumps({'schema_version': 1,
+            'declared_at': stale_at, 'collectors': ['statusline']}), encoding='utf-8')
+        store = dashboard.Store(self.root)
+        before = store.snapshot(session)
+        self.assertEqual(before['collector_health']['statusline']['receipt_status'], 'stale')
+        self.assertTrue(before['collector_health']['statusline']['configured'])
+        self.assertEqual(before['collector_health']['statusline']['retained_sessions'], 1)
+        self.assertEqual(len(before['session_observations']), 1)
+        result = statusline.ingest(json.dumps(record).encode(), self.ledger, collection_transport='stdin')
+        self.assertEqual(result['heartbeats'], 1)
+        after = store.snapshot(session)
+        self.assertEqual(after['collector_health']['statusline']['receipt_status'], 'recent')
+        self.assertEqual(after['totals']['requests'], 0)
+        self.assertEqual(after['totals']['completed_executions'], 0)
+        snapshot = after['session_observations'][0]['statusline']
+        self.assertEqual(snapshot['latest_context_usage']['input_tokens'], 1200)
+        self.assertEqual(snapshot['snapshot_receipts'], 2)
+        self.assertEqual(snapshot['snapshot_changes'], 1)
+        self.assertEqual(snapshot['session_cost_estimate_usd'], 0.25)
+        self.assertEqual(after['collector_health']['statusline']['transports']['stdin'], 1)
 
     def test_settings_validation(self):
         for bad in ({'enabled': 1}, {'retention_days': 0}, {'max_events': 100000}, {'api_key': 'no'},

@@ -45,6 +45,10 @@ class ScreenshotFixture(unittest.TestCase):
             self.assertEqual(snapshot['totals']['downstream']['input_tokens']['known'], 23320)
             self.assertEqual(len(snapshot['sessions']), 2)
             self.assertTrue(fixture['synthetic'])
+            self.assertEqual(snapshot['collector_health']['hooks']['receipt_status'], 'recent')
+            self.assertEqual(snapshot['collector_health']['statusline']['receipt_status'], 'recent')
+            self.assertEqual(snapshot['totals']['statusline']['sessions'], 1)
+            self.assertEqual(snapshot['session_observations'][1]['configuration']['model'], 'haiku')
 
 
 if __name__ == '__main__': unittest.main()

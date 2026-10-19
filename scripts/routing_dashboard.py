@@ -24,6 +24,88 @@ import routing_otel as otel
 import routing_catalog as catalog
 
 ASSETS = Path(__file__).resolve().parents[1] / 'assets/dashboard'
+RECEIPT_FRESH_SECONDS = 300
+COLLECTOR_NAMES = {'session_start', 'statusline', 'model_switch', 'session_end'}
+
+
+def collector_registration(root):
+    """Read an operator declaration only; never inspect Claude settings or commands."""
+    result = {'status': 'unverified', 'declared_at': None, 'collectors': [],
+              'effectiveness': 'unverified'}
+    path = Path(root) / 'telemetry-registration.json'
+    try:
+        info = path.lstat()
+        if path.is_symlink() or getattr(info, 'st_file_attributes', 0) & 0x400 or info.st_size > 4096:
+            return result
+        raw = core.read_json(path.read_text(encoding='utf-8-sig'))
+        if (not isinstance(raw, dict) or set(raw) != {'schema_version', 'declared_at', 'collectors'}
+                or type(raw['schema_version']) is not int or raw['schema_version'] != 1
+                or not state.timestamp(raw['declared_at']) or not isinstance(raw['collectors'], list)
+                or len(raw['collectors']) > len(COLLECTOR_NAMES)
+                or any(not isinstance(name, str) or name not in COLLECTOR_NAMES for name in raw['collectors'])
+                or len(set(raw['collectors'])) != len(raw['collectors'])):
+            return result
+        return {**result, 'status': 'declared', 'declared_at': state.timestamp(raw['declared_at']),
+                'collectors': sorted(raw['collectors'])}
+    except (OSError, ValueError, TypeError, UnicodeError, RecursionError):
+        return result
+
+
+def latest_event(events, predicate):
+    rows = [event for event in events if predicate(event) and state.timestamp(event.get('observed_at'))]
+    return max(rows, key=lambda event: state.timestamp(event['observed_at']), default=None)
+
+
+def collector_health(events, registration, now):
+    """Receipt freshness is evidence of receipt, never proof of an active producer."""
+    result = {}
+    for name, source, declarations in (
+            ('hooks', 'claude_hook', {'session_start', 'model_switch', 'session_end'}),
+            ('statusline', 'claude_statusline', {'statusline'})):
+        rows = [event for event in events if event['source'] == source]
+        latest = latest_event(rows, lambda _: True)
+        stamp = state.timestamp(latest.get('observed_at')) if latest else None
+        age = ((now - state.dt.datetime.fromisoformat(stamp)).total_seconds() if stamp else None)
+        status = ('none' if age is None else 'timestamp_unverified' if age < 0
+                  else 'recent' if age <= RECEIPT_FRESH_SECONDS else 'stale')
+        result[name] = {
+            'configured': bool(set(registration['collectors']) & declarations)
+                if registration['status'] == 'declared' else None,
+            'configuration_evidence': 'operator_declaration_only', 'effectiveness': 'unverified',
+            'receipt_status': status, 'last_received_at': stamp,
+            'age_seconds': max(0, round(age)) if age is not None else None,
+            'freshness_seconds': RECEIPT_FRESH_SECONDS,
+            'retained_sessions': len({event['session_id'] for event in rows}),
+            'transports': {transport: sum(event.get('collection_transport') == transport for event in rows)
+                           for transport in ('stdin', 'http')},
+            'transport_unreported_records': sum(event.get('collection_transport') not in ('stdin', 'http')
+                                                for event in rows)}
+    return result
+
+
+def session_observations(events):
+    """Keep configured, recommended, requested and actual models as separate evidence."""
+    result = []
+    for session_id in sorted({event['session_id'] for event in events}):
+        rows = [event for event in events if event['session_id'] == session_id]
+        configured = latest_event(rows, lambda event: event.get('model') and (
+            event['source'] == 'claude_statusline' or event['source'] == 'claude_hook'
+            and event.get('mode') in ('hook_session', 'hook_model_switch')))
+        recommended = latest_event(rows, lambda event: event['source'] == 'router' and event.get('model'))
+        requested = latest_event(rows, lambda event: event.get('execution_model'))
+        def model_evidence(event, model_field='model'):
+            return ({'model': event.get(model_field), 'effort': event.get('effort') if model_field == 'model'
+                     else event.get('execution_effort'), 'source': event.get('model_source'),
+                     'observed_at': event['observed_at']} if event else None)
+        snapshot = latest_event(rows, lambda event: event['source'] == 'claude_statusline')
+        result.append({'session_id': session_id, 'configuration': model_evidence(configured),
+            'recommendation': model_evidence(recommended), 'execution_request': model_evidence(requested, 'execution_model'),
+            'actual_execution': None,  # Current feeds do not attest the actual execution model.
+            'statusline': ({key: snapshot.get(key) for key in (
+                'latest_context_usage', 'session_cost_estimate_usd', 'session_duration_ms',
+                'session_api_duration_ms', 'snapshot_receipts', 'snapshot_changes', 'changed_at', 'observed_at')}
+                if snapshot else None)})
+    return result
 
 
 def package_version():
@@ -189,13 +271,20 @@ class Store:
             daily.setdefault(day, []).append(event)
         model_catalog = catalog.public(catalog.load(self.root))
         if self.catalog_error: model_catalog.update(status='error',last_error=self.catalog_error)
+        now = state.dt.datetime.now(state.dt.timezone.utc)
+        registration = collector_registration(self.root)
         return {'config': config, 'config_version': version, 'events': events, 'model_catalog':model_catalog,
                 'totals': state.totals(events, settings), 'sessions': sessions, 'selected_session': session,
+                'collector_registration': registration,
+                'collector_health': collector_health(events, registration, now),
+                'session_observations': session_observations(events),
                 'daily': [{'day': day, **state.totals(items, settings)} for day, items in sorted(daily.items())],
-                'observed_at': state.dt.datetime.now(state.dt.timezone.utc).isoformat(),
+                'observed_at': now.isoformat(),
                 'coverage': {'router': 'instrumented_runtime_only', 'claude_exec': 'unsupported_no_verified_collector',
                              'claude_hooks': 'explicit_opt_in_event_metadata_only',
-                             'interactive_tui': 'unobserved_without_hooks',
+                             'claude_statusline': 'optional_cli_configuration_and_context_snapshot',
+                             'interactive_tui': 'explicit_hooks_and_optional_statusline',
+                             'ollama_compatible': 'unverified_unless_same_claude_code_emits_supported_fields',
                              'claude_desktop': 'unsupported_no_verified_feed',
                              'automatic_dispatch': 'unsupported_recommendations_only'},
                 'refresh_seconds': 2}
@@ -503,7 +592,8 @@ class Handler(BaseHTTPRequestHandler):
             settings = state.LedgerSettings.parse(config['observability'])
             if settings.enabled:
                 diagnostics, producer = {}, {}
-                counts = otel.ingest(raw, state.Ledger(self.server.store.root, settings), diagnostics, producer)
+                counts = otel.ingest(raw, state.Ledger(self.server.store.root, settings), diagnostics, producer,
+                                     collection_transport='http')
                 self.server.record_producer(producer)
                 self.server.record_otel(received=True, observed=counts['accepted'] > 0, requests=1, validated_batches=1,
                     **{field + '_records': amount for field, amount in counts.items()},

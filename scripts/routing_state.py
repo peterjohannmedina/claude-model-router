@@ -36,6 +36,20 @@ def usage(value):
     return result if any(v is not None for v in result.values()) else None
 
 
+def snapshot_number(value, integral=False):
+    """Validate nullable cumulative/context snapshot numbers without coercion."""
+    if value is None:
+        return None
+    if (type(value) not in ((int,) if integral else (int, float))
+            or not 0 <= value <= 10**12 or not math.isfinite(value)):
+        raise ValueError('invalid_statusline_number')
+    return value
+
+
+def statusline_request_id(session):
+    return str(uuid.uuid5(uuid.UUID(identifier(session, allow_unassigned=False)), 'statusline_snapshot'))
+
+
 def probability(value):
     return value if type(value) in (int, float) and 0 <= value <= 1 and math.isfinite(value) else None
 
@@ -93,11 +107,15 @@ def sanitize(raw):
     """No arbitrary text, endpoints, paths, payloads, headers, keys or hashes of prompts."""
     if not isinstance(raw, dict): raise ValueError('invalid_event')
     source = raw.get('source')
-    if source not in ('router', 'claude_exec', 'claude_otel', 'claude_hook'): raise ValueError('invalid_source')
+    if source not in ('router', 'claude_exec', 'claude_otel', 'claude_hook', 'claude_statusline'): raise ValueError('invalid_source')
     result = {'source': source, 'session_id': identifier(raw.get('session_id')),
               'request_id': identifier(raw.get('request_id'), allow_unassigned=False), 'stage': raw.get('stage', 2)}
     result['session_source'] = raw.get('session_source')
     if result['session_source'] not in (None, 'stream_fallback', 'claude_thread'): raise ValueError('invalid_session_source')
+    transport = raw.get('collection_transport')
+    if transport not in (None, 'stdin', 'http'): raise ValueError('invalid_collection_transport')
+    if transport is not None:
+        result['collection_transport'] = transport
     if type(result['stage']) is not int or result['stage'] not in (0, 1, 2): raise ValueError('invalid_stage')
     for key in ('model', 'effort', 'adapter', 'override_model', 'override_effort', 'fallback_reason',
                 'local_status', 'execution_status', 'model_source', 'mode', 'error', 'stream_status',
@@ -117,9 +135,11 @@ def sanitize(raw):
         result[key] = count(raw.get(key))
     for key in ('local_enabled', 'decisions_enabled', 'evaluator_attempted', 'evaluator_succeeded', 'evaluator_fallback'):
         result[key] = raw.get(key) if type(raw.get(key)) is bool else None
-    if source in ('claude_otel', 'claude_hook'):
+    if source in ('claude_otel', 'claude_hook', 'claude_statusline'):
         validation = raw.get('contract_validation')
-        if validation not in (None, 'reviewed_version', 'reviewed_series_schema', 'documented_hook_schema'): raise ValueError('invalid_otel_contract')
+        validations = {None, 'reviewed_version', 'reviewed_series_schema', 'documented_hook_schema'}
+        if source == 'claude_statusline': validations.add('documented_statusline_schema')
+        if validation not in validations: raise ValueError('invalid_otel_contract')
         result['contract_validation'] = validation
         version = raw.get('producer_version')
         if version is not None and (not isinstance(version, str) or not re.fullmatch(
@@ -135,16 +155,55 @@ def sanitize(raw):
                 ('hook_model_switch', 'model_switch_observed'),
                 ('hook_subagent_start', 'subagent_start_observed'),
                 ('hook_subagent_stop', 'subagent_stop_observed'))}
+        if source == 'claude_statusline':
+            modes = {'statusline_snapshot': ('session_snapshot_observed', 'statusline_configuration')}
+            if (validation != 'documented_statusline_schema'
+                    or result['request_id'] != statusline_request_id(result['session_id'])
+                    or result['stage'] != 2 or result['adapter'] != 'native'):
+                raise ValueError('invalid_statusline_identity')
+            from routing_catalog import model_id
+            if raw.get('model') is not None and (not model_id(raw['model']) or result['model'] is None):
+                raise ValueError('invalid_statusline_model')
+            if raw.get('effort') not in (None, 'low', 'medium', 'high', 'xhigh', 'max'):
+                raise ValueError('invalid_statusline_effort')
+            context = raw.get('latest_context_usage')
+            if context is not None and (not isinstance(context, dict)
+                    or set(context) - {'input_tokens', 'output_tokens'}):
+                raise ValueError('invalid_statusline_context')
+            result['latest_context_usage'] = ({key: snapshot_number(context.get(key), integral=True)
+                for key in ('input_tokens', 'output_tokens')} if context is not None else None)
+            if result['latest_context_usage'] is not None and all(v is None for v in result['latest_context_usage'].values()):
+                result['latest_context_usage'] = None
+            for key in ('session_duration_ms', 'session_api_duration_ms', 'session_cost_estimate_usd'):
+                result[key] = snapshot_number(raw.get(key))
         if (result['mode'] not in modes or result['session_source'] != 'claude_thread'
                 or (result['execution_status'], result['model_source']) != modes[result['mode']]):
             raise ValueError('invalid_otel_observation')
     for key in ('evaluator_usage', 'downstream_usage'):
-        result[key] = None if source == 'claude_hook' else usage(raw.get(key))
-    if source == 'claude_hook':
+        result[key] = None if source in ('claude_hook', 'claude_statusline') else usage(raw.get(key))
+    if source in ('claude_hook', 'claude_statusline'):
         # Hooks attest event occurrence, never token usage or execution success.
         result['downstream_attempts'] = None
+    if source == 'claude_statusline':
+        # A status line is neither a request nor execution evidence. Even a
+        # crafted ledger event cannot attach provider usage/completion fields.
+        for key in ('evaluator_attempts', 'elapsed_ms', 'selection_elapsed_ms', 'command_items',
+                    'execution_adapter', 'execution_model', 'execution_effort', 'selected_action',
+                    'selected_candidate_id', 'confidence', 'admitted_choices', 'choice_probabilities'):
+            result[key] = None
+        for key in ('snapshot_receipts', 'snapshot_changes'):
+            result[key] = count(raw.get(key))
+        result['changed_at'] = timestamp(raw.get('changed_at'))
     # Source-reported timestamps are optional; observation time is always local.
     result['source_timestamp'] = timestamp(raw.get('source_timestamp'))
+    if source == 'claude_statusline':
+        allowed = {'source', 'session_id', 'request_id', 'stage', 'session_source', 'collection_transport',
+                   'model', 'effort', 'adapter', 'mode', 'execution_status', 'model_source',
+                   'contract_validation', 'producer_version', 'latest_context_usage',
+                   'session_duration_ms', 'session_api_duration_ms', 'session_cost_estimate_usd',
+                   'snapshot_receipts', 'snapshot_changes', 'changed_at',
+                   'evaluator_usage', 'downstream_usage', 'evaluator_attempts', 'downstream_attempts'}
+        result = {key: value for key, value in result.items() if key in allowed}
     return result
 
 
@@ -175,7 +234,29 @@ class Ledger:
         event = sanitize(raw)
         event_id = hashlib.sha256((event['source'] + ':' + event['request_id']).encode()).hexdigest()
         with self.connect() as connection:
+            if event['source'] == 'claude_statusline':
+                # Serialize read/modify/write counters across concurrent callback
+                # processes. A lock timeout remains a fail-soft collector error.
+                connection.execute('BEGIN IMMEDIATE')
             old = connection.execute('SELECT body FROM events WHERE id=?', (event_id,)).fetchone()
+            if event['source'] == 'claude_statusline':
+                previous = sanitize(json.loads(old[0])) if old else None
+                payload_keys = ('model', 'effort', 'producer_version', 'latest_context_usage',
+                                'session_duration_ms', 'session_api_duration_ms', 'session_cost_estimate_usd')
+                changed = previous is None or any(previous.get(k) != event.get(k) for k in payload_keys)
+                now = dt.datetime.now(dt.timezone.utc).isoformat()
+                stored = json.loads(old[0]) if old else {}
+                event.update(observed_at=now,
+                    first_observed_at=timestamp(stored.get('first_observed_at')) or now,
+                    changed_at=now if changed else timestamp(stored.get('changed_at')) or now,
+                    snapshot_receipts=(previous.get('snapshot_receipts') or 0) + 1 if previous else 1,
+                    snapshot_changes=(previous.get('snapshot_changes') or 0) + int(changed) if previous else 1)
+                connection.execute('INSERT INTO events VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET updated=excluded.updated, body=excluded.body',
+                                   (event_id, time.time(), json.dumps(event, allow_nan=False)))
+                self.prune(connection)
+                # Identical receipts refresh liveness/retention, but are not a
+                # new snapshot change and never contribute additional usage.
+                return changed
             if old:
                 previous = json.loads(old[0])
                 if event['source'] == 'claude_exec':
@@ -237,10 +318,26 @@ class Ledger:
 def totals(events, settings=LedgerSettings()):
     hooks = [e for e in events if e['source'] == 'claude_hook']
     otel = [e for e in events if e['source'] == 'claude_otel']
+    latest = {}
+    for event in events:
+        if event['source'] == 'claude_statusline':
+            session = event['session_id']
+            if session not in latest or (timestamp(event.get('observed_at')) or '') > (timestamp(latest[session].get('observed_at')) or ''):
+                latest[session] = event
+    statuslines = list(latest.values())
     # Exec turn usage and OTel model-response usage can cover the same work.
     # Never add them into one number without verified cross-feed correlation.
-    events = [e for e in events if e['source'] not in ('claude_otel', 'claude_hook')]
+    events = [e for e in events if e['source'] not in ('claude_otel', 'claude_hook', 'claude_statusline')]
     result = {'requests': len(events), 'completed_executions': sum(e.get('execution_status') == 'completed' for e in events)}
+    result['statusline'] = {'sessions': len(statuslines),
+        'receipts': sum(e.get('snapshot_receipts') or 0 for e in statuslines),
+        'changes': sum(e.get('snapshot_changes') or 0 for e in statuslines),
+        'latest_observed_at': max((timestamp(e.get('observed_at')) or '' for e in statuslines), default='') or None,
+        'sessions_with_context_usage': sum(any(v is not None for v in (e.get('latest_context_usage') or {}).values()) for e in statuslines)}
+    for key in ('session_duration_ms', 'session_api_duration_ms', 'session_cost_estimate_usd'):
+        values = [e.get(key) for e in statuslines if e.get(key) is not None]
+        result['statusline'][key] = {'known': sum(values) if values else None,
+                                    'unknown_sessions': len(statuslines) - len(values)}
     result['hooks'] = {'sessions': len({e['session_id'] for e in hooks}),
                       'observations': len(hooks),
                       'stops': sum(e.get('mode') == 'hook_stop' for e in hooks)}
