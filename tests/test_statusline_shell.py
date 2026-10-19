@@ -98,7 +98,7 @@ class StatuslineShell(unittest.TestCase):
     def run_pipeline(self, raw, mode='normal', config=None):
         self.display.write_text('#!/usr/bin/env bash\nexec ' + quoted(sys.executable)
             + ' -B ' + quoted(self.consumer) + ' ' + shlex.quote(mode)
-            + ' ' + quoted(self.received) + '\n', encoding='utf-8')
+            + ' ' + quoted(self.received) + '\n', encoding='utf-8', newline='\n')
         if config is not None:
             (self.state / 'config.json').write_text(json.dumps(config), encoding='utf-8')
         # Explicit arguments and quoted paths represent the corrected proposal;
