@@ -93,7 +93,7 @@ including those existing side effects, rather than just the metadata collector.
 Adding a timer therefore needs a separate scope decision.
 
 On Windows, the documented runner uses Git Bash when available and PowerShell
-otherwise. Do not copy an unquoted `C:\\Users\\...` command into a Bash pipeline:
+otherwise. Do not copy an unquoted `C:\Users\...` command into a Bash pipeline:
 backslashes can be interpreted as escapes. For a verified Bash runner, use
 quoted paths with forward slashes. A command with one existing executable and
 script argument can be composed like this (the actual shell still needs to be

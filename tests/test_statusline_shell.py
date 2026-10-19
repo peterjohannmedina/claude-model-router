@@ -82,9 +82,9 @@ class StatuslineShell(unittest.TestCase):
             'raw = sys.stdin.buffer.read()\n'
             'Path(destination).write_bytes(raw)\n'
             'if mode == "failure":\n'
-            '    sys.stderr.write("synthetic-display-failure\\n")\n'
+            '    sys.stderr.buffer.write(b"synthetic-display-failure\\n")\n'
             '    raise SystemExit(7)\n'
-            'sys.stdout.write("synthetic-display-output\\n")\n', encoding='utf-8')
+            'sys.stdout.buffer.write(b"synthetic-display-output\\n")\n', encoding='utf-8')
 
     def payload(self, **changes):
         value = {'session_id': SESSION, 'version': '2.1.303',
