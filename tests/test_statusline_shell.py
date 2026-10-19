@@ -1,4 +1,5 @@
 """Inert Bash composition tests. No installed display, settings, or state is used."""
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -122,7 +123,7 @@ class StatuslineShell(unittest.TestCase):
         self.assertEqual(result.stdout, b'synthetic-display-output\n')
         self.assertEqual(result.stderr, b'')
         self.assertEqual(self.received.read_bytes(), raw)
-        with sqlite3.connect(self.state / 'usage.sqlite3') as connection:
+        with closing(sqlite3.connect(self.state / 'usage.sqlite3')) as connection:
             records = connection.execute('SELECT body FROM events').fetchall()
         self.assertEqual(len(records), 1)
         row = json.loads(records[0][0])
