@@ -260,6 +260,16 @@ class LocalState(unittest.TestCase):
                     {'local_input_usd_per_million': float('nan')}):
             with self.assertRaises(ValueError): state.LedgerSettings.parse(bad)
 
+    def test_registration_utc_overflow_is_unverified_without_breaking_snapshot(self):
+        for stamp in ('0001-01-01T00:00:00+01:00', '9999-12-31T23:59:59-01:00'):
+            with self.subTest(stamp=stamp):
+                self.assertIsNone(state.timestamp(stamp))
+                (self.root / 'telemetry-registration.json').write_text(json.dumps({
+                    'schema_version': 1, 'declared_at': stamp, 'collectors': ['statusline']}))
+                snapshot = dashboard.Store(self.root).snapshot()
+                self.assertEqual(snapshot['collector_registration']['status'], 'unverified')
+                self.assertEqual(snapshot['events'], [])
+
     def test_request_and_stream_ids_require_uuid_and_malformed_rows_fail_closed(self):
         for malformed in (None, [], {'source':'router'}, event(request_id='unassigned')):
             with self.assertRaises(ValueError): state.sanitize(malformed)

@@ -80,7 +80,7 @@ def timestamp(value):
     try:
         parsed = dt.datetime.fromisoformat(value) if isinstance(value, str) and len(value) <= 40 else None
         return parsed.astimezone(dt.timezone.utc).isoformat() if parsed and parsed.tzinfo else None
-    except ValueError:
+    except (ValueError, OverflowError):
         return None
 
 

@@ -10,6 +10,7 @@ existing display. Malformed, oversized, or non-object input is not forwarded.
 """
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -26,6 +27,29 @@ def read_snapshot(stream):
 def collect(stream, ledger):
     _, event = read_snapshot(stream)
     return statusline.record(event, ledger)
+
+
+def discard_broken_stdout():
+    """Keep interpreter shutdown from retrying buffered writes to a dead pipe."""
+    try:
+        descriptor = sys.stdout.fileno()
+    except (AttributeError, OSError, TypeError, ValueError):
+        # Embedded callers may supply a stream without an OS descriptor.
+        return
+    null_descriptor = None
+    try:
+        null_descriptor = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(null_descriptor, descriptor)
+    except (OSError, TypeError, ValueError):
+        pass
+    finally:
+        # If the original descriptor was already closed, open() can reuse it.
+        # In that case it must stay open for the interpreter's final flush.
+        if null_descriptor is not None and null_descriptor != descriptor:
+            try:
+                os.close(null_descriptor)
+            except OSError:
+                pass
 
 
 def main(argv=None):
@@ -56,8 +80,8 @@ def main(argv=None):
             try:
                 sys.stdout.buffer.write(raw)
                 sys.stdout.buffer.flush()
-            except (OSError, ValueError):
-                pass
+            except (AttributeError, OSError, ValueError):
+                discard_broken_stdout()
     # Observation failures never issue a Claude control decision.
     return 0
 

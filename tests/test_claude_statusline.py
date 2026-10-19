@@ -5,6 +5,7 @@ import datetime as dt
 import io
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -271,6 +272,36 @@ class StatuslineTests(unittest.TestCase):
             self.assertEqual(code,0);self.assertEqual(out,raw)
             self.assertEqual(json.loads(err),{'error':'statusline_collection_failed'})
             self.assertNotIn(PRIVATE,err)
+
+    def test_closed_forwarding_pipe_exits_zero_without_shutdown_diagnostics(self):
+        # A real process boundary is required: an in-process mock cannot catch
+        # exit 120 or the finalizer's second buffered flush to a closed consumer.
+        with tempfile.TemporaryDirectory(dir=ROOT) as folder:
+            root=Path(folder)
+            (root/'config.json').write_text(json.dumps({'schema_version':1,
+                'observability':{'enabled':False}}),encoding='utf-8')
+            for padding in ('','x'*65536):
+                with self.subTest(buffered_bytes=len(padding)):
+                    raw=encoded(payload(unknown_padding=padding))
+                    with subprocess.Popen([sys.executable,'-B',str(ROOT/'scripts/collect_claude_statusline.py'),
+                        '--state-dir',str(root),'--forward-stdin'],stdin=subprocess.PIPE,
+                        stdout=subprocess.PIPE,stderr=subprocess.PIPE) as child:
+                        child.stdout.close()  # Consumer closes before any input is sent.
+                        child.stdout=None
+                        _,errors=child.communicate(raw,timeout=15)
+                        self.assertEqual(child.returncode,0,errors.decode('utf-8',errors='replace'))
+                        self.assertEqual(errors,b'')
+            self.assertFalse((root/'usage.sqlite3').exists())
+
+    def test_broken_stdout_without_fileno_remains_fail_soft(self):
+        class BrokenBuffer:
+            def write(self,_):raise BrokenPipeError('synthetic closed consumer')
+        stdout=Streams();stdout.buffer=BrokenBuffer()
+        with patch.object(sys,'stdin',Streams(encoded())),patch.object(sys,'stdout',stdout), \
+             patch.object(Path,'is_file',return_value=False),patch.object(state.Ledger,'put',return_value=False), \
+             patch.object(collector.os,'open',side_effect=AssertionError('no descriptor to redirect')):
+            self.assertEqual(collector.main(['--state-dir',str(ROOT/'synthetic-never-created'),
+                                            '--forward-stdin']),0)
 
     def test_disabled_recording_never_creates_ledger_or_claims_heartbeat(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as root:
